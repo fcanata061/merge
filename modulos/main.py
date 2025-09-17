@@ -5,9 +5,9 @@ from .repository import list_packages
 
 def print_help():
     print("""
-merge - Gerenciador de pacotes simples
+merge - Gerenciador de pacotes avançado
 Comandos:
-    install <pacote>   - Instala um pacote
+    install <pacote>   - Instala um pacote com dependências
     remove <pacote>    - Remove um pacote
     list               - Lista pacotes disponíveis
     help               - Mostra esta ajuda
