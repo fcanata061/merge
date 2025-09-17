@@ -1,7 +1,7 @@
-import os
 from .config import cfg
-from .repository import package_exists, get_dependencies
-from .ebuild import run_ebuild
+from .repository import package_exists
+from .recipe import get_dependencies, get_commands
+from .sandbox import run_in_sandbox
 from .logs import log
 
 def install_package(package_name, installed=None):
@@ -17,16 +17,18 @@ def install_package(package_name, installed=None):
         return False
 
     # Instalar dependências primeiro
-    dependencies = get_dependencies(package_name)
-    for dep in dependencies:
+    for dep in get_dependencies(package_name):
         if not install_package(dep, installed):
             print(f"Falha ao instalar dependência: {dep}")
             return False
 
-    # Executar script de instalação (ebuild)
-    if run_ebuild(package_name):
+    # Executar comandos dentro do sandbox
+    commands = get_commands(package_name)
+    if run_in_sandbox(commands, package_name):
         installed.add(package_name)
         print(f"Pacote '{package_name}' instalado com sucesso.")
+        log(f"Pacote '{package_name}' instalado com sucesso.")
         return True
     else:
+        print(f"Falha ao instalar pacote '{package_name}'")
         return False
