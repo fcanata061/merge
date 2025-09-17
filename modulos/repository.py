@@ -9,3 +9,15 @@ def list_packages():
 
 def package_exists(package_name):
     return package_name in list_packages()
+
+def get_dependencies(package_name):
+    """
+    Lê um arquivo de dependências dentro do pacote no repositório.
+    Exemplo: /var/lib/merge/repo/<pacote>/depends.txt
+    """
+    repo_path = cfg.get("global", "repository_path")
+    depends_file = os.path.join(repo_path, package_name, "depends.txt")
+    if os.path.exists(depends_file):
+        with open(depends_file, "r") as f:
+            return [line.strip() for line in f if line.strip()]
+    return []
