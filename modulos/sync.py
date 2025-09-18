@@ -10,7 +10,10 @@ RESET = "\033[0m"
 
 
 def sync_recipes():
-    """Sincroniza todas as receitas do repositório Git para um diretório local"""
+    """
+    Sincroniza receitas do repositório Git para o diretório local.
+    Se já existir, faz pull incremental para atualizar apenas o que mudou.
+    """
     repo_url = cfg.get("global", "repo_url", fallback=None)
     recipes_dir = cfg.get("global", "recipes_dir", fallback="/var/lib/merge/recipes")
 
@@ -24,15 +27,16 @@ def sync_recipes():
         if not os.path.exists(os.path.join(recipes_dir, ".git")):
             print(f"{YELLOW}[SYNC]{RESET} Clonando repositório de receitas para {recipes_dir} ...")
             subprocess.run(
-                ["git", "clone", repo_url, recipes_dir],
+                ["git", "clone", "--depth", "1", repo_url, recipes_dir],
                 check=True
             )
         else:
-            print(f"{YELLOW}[SYNC]{RESET} Atualizando repositório de receitas em {recipes_dir} ...")
-            subprocess.run(
-                ["git", "-C", recipes_dir, "pull", "--rebase"],
-                check=True
-            )
+            print(f"{YELLOW}[SYNC]{RESET} Atualizando receitas em {recipes_dir} ...")
+            # Fetch incremental
+            subprocess.run(["git", "-C", recipes_dir, "fetch", "--all"], check=True)
+            # Atualiza apenas se houver mudanças
+            subprocess.run(["git", "-C", recipes_dir, "pull", "--rebase"], check=True)
+
         print(f"{GREEN}[SYNC]{RESET} Repositório sincronizado com sucesso.")
         log(f"Sync concluído com {repo_url}")
         return True
