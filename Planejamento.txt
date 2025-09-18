@@ -4,6 +4,7 @@
 
 /merge/
 ├─ main.py           # CLI principal
+├─ merge             # Executa o main.py (binário)
 ├─ config.py         # Configurações globais
 ├─ logs.py           # Logs coloridos e estágios
 ├─ recipe.py         # Carrega receitas YAML e hooks
@@ -16,7 +17,10 @@
 ├─ install.py        # Instalação completa com compilação
 ├─ remove.py         # Remoção de pacotes com hooks
 ├─ depclean.py       # Depclean/deepclean inteligente
-└─ recipes/          # Diretório das receitas YAML
+├─ revdep.py         # Corrige problemas links ...
+├─ update.py         # Procura em todos os repositórios de todos os programas por últimas versões compara com as instaladas e pergunta se quer instalar ou gerar arquivo com as atualizações.
+├─ upgrade.py.       # Upgrade para programas mais novos seguindo a lista do update
+└─ repo/<categoria>  # Diretório das receitas YAML
 
 ## Funcionalidades Planejadas
 
@@ -24,13 +28,18 @@
 
 * Comandos abreviados e longos:
 
-  * merge i <pacote> → Instala pacote (download, extrair, patch, compile, install)
-  * merge b <pacote> → Build-only (não instala)
-  * merge c <pacote> → Compile-only
+  * merge i <pacote> → Instala pacote (download, extrair, patch, compile, install e install de binário e install do sandbox)
+  * merge b <pacote> → Download, extrair, patch, compile (não instala)
+  * merge d <pacote> → Download (somente)
+  * merge e <pacote> → Descompacta (somente)
+  * merge s <pacote> → Procura no repo/<categoria>/programa se instalado mostrar símbolo \[✅] se presente
+  * merge si <pacote> → Mostra informações sobre o programa
+  * merge u (update) → Chama o módulo update
+  * merge up (upgrade) → Atualiza para novas versões
   * merge r <pacote> → Remove pacote
-  * merge uses <pacote> \[+flag|-flag] → Ativa/desativa USE flags
-  * merge depclean → Remove pacotes órfãos ou dependências de USE desativadas
-* Busca por pacote instalado com símbolo \[✅] se presente
+  * merge use <pacote> \[+flag|-flag] → Ativa/desativa USE flags
+  * merge depclean → Remove pacotes órfãos ou dependências de USE desativadas e chama revdep
+  * 
 
 ### Sandbox (sandbox.py)
 
@@ -44,8 +53,8 @@
 * Download múltiplo (HTTP/HTTPS/Git)
 * Descompactação automática de formatos: tar.gz, tar.bz2, tar.xz, zip
 * Aplicação de múltiplos patches
-* Hooks: pre\_build, post\_build, pre\_compile, post\_compile
-* Build usando make com número de jobs configurável
+* Hooks: pre\_configure, post\_configure, pre\_build, post\_build, pre\_compile, post\_compile
+* Build usando make com número de jobs configurável e COMMON_FLAGS configurável 
 * Instalação no prefix configurado (/usr/local por padrão)
 
 ### Remoção (remove.py)
@@ -83,7 +92,7 @@
   * dependencies: build/runtime
   * use\_flags: flags e dependências associadas
   * patches: lista de arquivos de patch
-  * hooks: pre\_build, post\_build, pre\_compile, post\_compile, pre\_remove, post\_remove
+  * hooks: pre\_configure, post\_configure, pre\_build, post\_build, pre\_compile, post\_compile, pre\_remove, post\_remove
 
 ### Logs (logs.py)
 
@@ -96,7 +105,7 @@
 * Diretório de trabalho (/var/lib/merge/work)
 * Diretório de receitas (/var/lib/merge/recipes)
 * Caminho de instalação padrão (/usr/local)
-* Número máximo de jobs para make
+* Número máximo de jobs para make e COMMON_FLAGS
 
 ### Download (download.py)
 
@@ -112,7 +121,7 @@
 ### Patch (patch.py)
 
 * Aplicação automática de múltiplos patches após extração
-* Diretório padrão de patches: /recipes/<pacote>/patches
+* Diretório padrão de patches: /repo/<categoria>/<pacote>/patches
 * Integração com sandbox
 
 ### Sandbox Integrado
@@ -121,8 +130,12 @@
 * Hooks executados dentro do sandbox
 * Mantém o sistema principal isolado de erros ou scripts maliciosos
 
-### Observações Gerais
+#### Adicionar
 
-* Todos os módulos são interdependentes e devem ser importados via `merge` como pacote Python
-* Projeto inspirado no Portage do Gentoo, mas simplificado e adaptado para Python e YAML
-* Suporte para futuras evoluções: caching de pacotes, slots opcionais, hooks avançados, logging detalhado e UI colorida interativa
+* Caching de pacotes
+* Evoluir hooks
+* Logging detalhado
+* UI colorida interativa
+* Registro de tudo
+
+
