@@ -1,45 +1,49 @@
+import hashlib
+import json
+import logging
+from typing import Dict, List, Optional, Set, Tuple
 from collections import defaultdict, deque
-from typing import Dict, List, Set, Tuple, Optional
+from concurrent.futures import ThreadPoolExecutor
 from packaging.version import Version, InvalidVersion
-import concurrent.futures
-from recipe import Recipe
-from config import Config
-import logs
 
+logger = logging.getLogger("DependencyResolver")
+logging.basicConfig(level=logging.INFO)
 
+# ----------------------------
+# Classe Recipe moderna
+# ----------------------------
+class Recipe:
+    def __init__(self, name: str, version: str,
+                 build_deps: List[str] = None,
+                 runtime_deps: List[str] = None,
+                 use_deps: Dict[str, List[str]] = None,
+                 conflicts: List[str] = None):
+        self.name = name
+        self.version = version
+        self.build_deps = build_deps or []
+        self.runtime_deps = runtime_deps or []
+        self.use_deps = use_deps or {}
+        self.conflicts = conflicts or []
+
+# ----------------------------
+# Classe Graph moderna e paralelizável
+# ----------------------------
 class DependencyGraph:
-    def __init__(self):
-        self.graph: Dict[str, List[Tuple[str, str]]] = defaultdict(list)
+    def __init__(self, use_flags: Optional[Set[str]] = None):
+        self.graph: Dict[str, Set[str]] = defaultdict(set)
+        self.reverse_graph: Dict[str, Set[str]] = defaultdict(set)
         self.recipes: Dict[str, Recipe] = {}
-        self.use_flags: Set[str] = set()
-        self.profiles: Dict[str, Set[str]] = {}
-        self.reverse_graph: Dict[str, List[str]] = defaultdict(list)  # para "why()"
-        self.cache: Dict[str, List[str]] = {}  # cache de resoluções
+        self.use_flags: Set[str] = use_flags or set()
+        self._lock = None  # opcional para threads
 
-    # ===============================
-    # Gestão de receitas e USE
-    # ===============================
     def add_recipe(self, recipe: Recipe):
         self.recipes[recipe.name] = recipe
-        logs.debug(f"Receita registrada: {recipe.name}-{recipe.version}")
+        logger.debug(f"Receita adicionada: {recipe.name}-{recipe.version}")
 
     def enable_use(self, flag: str):
         self.use_flags.add(flag)
-        logs.debug(f"USE flag ativada: {flag}")
 
-    def define_profile(self, name: str, flags: List[str]):
-        self.profiles[name] = set(flags)
-
-    def activate_profile(self, name: str):
-        if name not in self.profiles:
-            raise ValueError(f"Perfil não encontrado: {name}")
-        self.use_flags |= self.profiles[name]
-        logs.info(f"Perfil ativado: {name} -> {self.profiles[name]}")
-
-    # ===============================
-    # Resolução de dependências
-    # ===============================
-    def _split_version(self, dep: str):
+    def _split_version(self, dep: str) -> Tuple[str, Optional[str], Optional[str]]:
         for op in [">=", "<=", "=", ">", "<"]:
             if op in dep:
                 name, ver = dep.split(op, 1)
@@ -47,94 +51,85 @@ class DependencyGraph:
         return dep.strip(), None, None
 
     def _parse_dependency(self, dep: str) -> List[Tuple[str, Optional[str], Optional[str]]]:
-        if "|" in dep:  # OR-deps
-            return [self._split_version(p.strip()) for p in dep.split("|")]
+        # Suporte a OR-dependencies
+        if "|" in dep:
+            return [self._split_version(d.strip()) for d in dep.split("|")]
         return [self._split_version(dep)]
 
     def _check_version(self, recipe: Recipe, op: Optional[str], ver: Optional[str]) -> bool:
         if not op or not ver:
             return True
         try:
-            pkg_version = Version(recipe.version)
-            dep_version = Version(ver)
+            return {
+                ">=": Version(recipe.version) >= Version(ver),
+                "<=": Version(recipe.version) <= Version(ver),
+                "=": Version(recipe.version) == Version(ver),
+                ">": Version(recipe.version) > Version(ver),
+                "<": Version(recipe.version) < Version(ver),
+            }.get(op, False)
         except InvalidVersion:
             return False
-        return {
-            ">=": pkg_version >= dep_version,
-            "<=": pkg_version <= dep_version,
-            "=": pkg_version == dep_version,
-            ">": pkg_version > dep_version,
-            "<": pkg_version < dep_version,
-        }.get(op, False)
 
     def _check_conflicts(self, recipe: Recipe):
-        for conflict in getattr(recipe, "conflicts", []):
+        for conflict in recipe.conflicts:
             for name, op, ver in self._parse_dependency(conflict):
-                if name in self.recipes:
-                    dep_recipe = self.recipes[name]
-                    if self._check_version(dep_recipe, op, ver):
-                        raise RuntimeError(
-                            f"Conflito: {recipe.name}-{recipe.version} não pode coexistir com "
-                            f"{dep_recipe.name}-{dep_recipe.version}"
-                        )
+                r = self.recipes.get(name)
+                if r and self._check_version(r, op, ver):
+                    raise RuntimeError(f"Conflito: {recipe.name}-{recipe.version} com {r.name}-{r.version}")
 
-    def build(self, root: str):
-        if root in self.cache:  # cache para evitar recomputar
-            logs.debug(f"Usando cache para {root}")
-            return self.cache[root]
-
+    def build_graph(self, root: str, parallel: bool = False) -> Set[str]:
         visited = set()
+        executor = ThreadPoolExecutor() if parallel else None
 
-        def dfs(pkg_name: str):
-            if pkg_name in visited:
+        def dfs(pkg: str):
+            if pkg in visited:
                 return
-            visited.add(pkg_name)
-
-            recipe = self.recipes.get(pkg_name)
+            visited.add(pkg)
+            recipe = self.recipes.get(pkg)
             if not recipe:
-                raise ValueError(f"Receita não encontrada: {pkg_name}")
-
+                raise ValueError(f"Receita não encontrada: {pkg}")
             self._check_conflicts(recipe)
 
-            def process_deps(dep_list, dtype: str):
+            def process_deps(dep_list: List[str]):
                 for dep in dep_list:
                     candidates = self._parse_dependency(dep)
                     chosen = None
                     for name, op, ver in candidates:
-                        dep_recipe = self.recipes.get(name)
-                        if dep_recipe and self._check_version(dep_recipe, op, ver):
+                        r = self.recipes.get(name)
+                        if r and self._check_version(r, op, ver):
                             chosen = name
                             break
                     if not chosen:
-                        raise RuntimeError(f"Nenhuma dependência válida encontrada para {dep} exigida por {pkg_name}")
-                    self.graph[pkg_name].append((chosen, dtype))
-                    self.reverse_graph[chosen].append(pkg_name)
-                    dfs(chosen)
+                        raise RuntimeError(f"Nenhuma dependência válida encontrada para {dep} exigida por {pkg}")
+                    self.graph[pkg].add(chosen)
+                    self.reverse_graph[chosen].add(pkg)
+                    if parallel:
+                        executor.submit(dfs, chosen)
+                    else:
+                        dfs(chosen)
 
-            process_deps(recipe.build_deps, "build")
-            process_deps(recipe.runtime_deps, "runtime")
-            for flag, use_deps in recipe.use_deps.items():
+            process_deps(recipe.build_deps)
+            process_deps(recipe.runtime_deps)
+            for flag, deps in recipe.use_deps.items():
                 if flag in self.use_flags:
-                    process_deps(use_deps, f"use[{flag}]")
+                    process_deps(deps)
 
         dfs(root)
-        self.cache[root] = list(visited)  # salva cache
-        return list(visited)
+        if executor:
+            executor.shutdown(wait=True)
+        return visited
 
-    # ===============================
-    # Ordenação + análise
-    # ===============================
     def topological_sort(self) -> List[str]:
         indegree = defaultdict(int)
         for u in self.graph:
-            for v, _ in self.graph[u]:
+            for v in self.graph[u]:
                 indegree[v] += 1
         queue = deque([u for u in self.graph if indegree[u] == 0])
         order = []
         while queue:
             u = queue.popleft()
             order.append(u)
-            for v, _ in self.graph[u]:
+            for v in self.graph[u]:
                 indegree[v] -= 1
                 if indegree[v] == 0:
                     queue.append(v)
@@ -143,31 +138,29 @@ class DependencyGraph:
         return order
 
     def explain(self, root: Optional[str] = None):
-        print("\n[DependencyGraph] Relatório de dependências:")
         pkgs = [root] if root else self.graph.keys()
         for pkg in pkgs:
-            recipe = self.recipes[pkg]
-            for dep, dtype in self.graph[pkg]:
-                dep_recipe = self.recipes[dep]
-                print(f" - {pkg}-{recipe.version} depende de {dep}-{dep_recipe.version} ({dtype})")
+            for dep in self.graph[pkg]:
+                print(f"{pkg} depende de {dep}")
 
     def why(self, pkg: str):
-        """Mostra quem pediu este pacote"""
         if pkg not in self.reverse_graph:
-            print(f"{pkg} não é dependido por ninguém.")
+            print(f"{pkg} não é dependido por ninguém")
             return
-        print(f"\n[DependencyGraph] {pkg} foi requerido por:")
-        for parent in self.reverse_graph[pkg]:
-            print(f" - {parent}")
+        print(f"{pkg} é requerido por:")
+        for p in self.reverse_graph[pkg]:
+            print(f" - {p}")
 
     def find_orphans(self) -> List[str]:
-        depended = {dep for deps in self.graph.values() for dep, _ in deps}
+        depended = {dep for deps in self.graph.values() for dep in deps}
         return [pkg for pkg in self.recipes if pkg not in depended]
 
-
+# ----------------------------
+# Resolver de dependências moderno
+# ----------------------------
 class DependencyResolver:
-    def __init__(self):
-        self.graph = DependencyGraph()
+    def __init__(self, use_flags: Optional[Set[str]] = None):
+        self.graph = DependencyGraph(use_flags=use_flags)
 
     def add_recipe(self, recipe: Recipe):
         self.graph.add_recipe(recipe)
@@ -175,16 +168,10 @@ class DependencyResolver:
     def enable_use(self, flag: str):
         self.graph.enable_use(flag)
 
-    def define_profile(self, name: str, flags: List[str]):
-        self.graph.define_profile(name, flags)
-
-    def activate_profile(self, name: str):
-        self.graph.activate_profile(name)
-
-    def resolve(self, root: str) -> List[str]:
-        self.graph.build(root)
+    def resolve(self, root: str, parallel: bool = False) -> List[str]:
+        self.graph.build_graph(root, parallel=parallel)
         order = self.graph.topological_sort()
-        logs.info(f"Ordem de instalação: {order}")
+        logger.info(f"Ordem de instalação: {order}")
         return order
 
     def explain(self, root: Optional[str] = None):
