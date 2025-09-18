@@ -1,0 +1,113 @@
+# Emerge/Portage - Funcionalidades e Suporte
+
+Este documento lista as funcionalidades e recursos que o Portage e seu CLI `emerge` suportam, como referência para comparação com o Merge.
+
+## 1. Instalação e Atualização de Pacotes
+
+* Instalação de pacotes a partir do source.
+* Atualização de pacotes individuais ou todos os pacotes do sistema.
+* Suporte a versões específicas de pacotes.
+* Reinstalação de pacotes existentes.
+* Uso de prefixed installs e diretórios customizados.
+
+## 2. USE Flags
+
+* Sistema de flags que definem funcionalidades opcionais de pacotes.
+* USE flags globais e específicas por pacote.
+* Dependências associadas a USE flags instaladas automaticamente.
+* Registro persistente de USE flags.
+
+## 3. Slots
+
+* Suporte a múltiplas versões de um mesmo pacote coexistindo no sistema.
+* Permite bibliotecas diferentes para diferentes pacotes simultaneamente.
+
+## 4. Máscaras de Pacotes
+
+* `package.mask` e `package.unmask` para evitar instalação de versões instáveis.
+* `package.accept_keywords` para permitir versões específicas.
+
+## 5. Dependências
+
+* Resolução automática de dependências build e runtime.
+* Detecção de dependências órfãs para depclean.
+* Dependências opcionais e recomendadas.
+
+## 6. Patches
+
+* Suporte a patches aplicáveis via ebuilds.
+* Aplicação condicional baseada em USE flags ou versão.
+* Diretórios de patches por pacote.
+
+## 7. Hooks e Scripts
+
+* Hooks de pré e pós etapas de build (`pre_*`, `post_*`).
+* Scripts de teste e validação.
+* Hooks de remoção e atualização.
+
+## 8. Sandbox
+
+* Construção em ambiente isolado (`ebuild sandbox`).
+* Proteção do sistema principal contra scripts maliciosos.
+* Controles de rede e filesystem.
+
+## 9. Depclean / Deepclean
+
+* Remoção de pacotes órfãos.
+* Remoção de dependências de USE flags desativadas.
+* Opção de limpeza profunda (deepclean).
+
+## 10. Perfil de Sistema
+
+* Perfis de instalação: desktop, server, hardened, etc.
+* Definição de USE flags padrão e otimizações do sistema.
+
+## 11. Logging e Histórico
+
+* Registro completo de operações de emerge.
+* Possibilidade de reverter ações com logs detalhados.
+
+## 12. Binários e Caching
+
+* `quickpkg` e `pkgcache` para criar pacotes binários.
+* Instalação de pacotes pré-compilados.
+* Cache de downloads para builds offline.
+
+## 13. Suporte a Múltiplos Repositórios
+
+* Sincronização via `emerge --sync` com repositórios principais e overlays.
+* Suporte a Git overlays.
+
+## 14. Ferramentas de Busca e Informação
+
+* `equery`, `qlist`, `qdepends` para buscar pacotes, dependências e arquivos.
+* Exibição de status de pacotes instalados.
+* Informações detalhadas sobre cada pacote.
+
+## 15. Atualizações Automáticas e Auditoria
+
+* Verificação de pacotes desatualizados.
+* Auditoria de dependências e inconsistências do sistema.
+
+## 16. Suporte a Múltiplas Plataformas e Otimizações
+
+* Otimização de compilação via CFLAGS e MAKEOPTS.
+* Compatível com diferentes arquiteturas Linux.
+* Suporte a cross-compiling.
+
+## 17. Controle de Conflitos
+
+* Detecção de arquivos ou pacotes conflitantes antes da instalação.
+* Solução de conflitos manual ou automática.
+
+## 18. Interface Avançada
+
+* CLI robusta com abreviações e opções detalhadas.
+* Saída colorida e informativa.
+* Suporte a scripts de automação e wrappers.
+
+## Observações
+
+* O Portage é um sistema maduro com décadas de desenvolvimento.
+* Serve como referência para o Merge em termos de funcionalidade e flexibilidade.
+* Qualquer implementação inspirada nele pode seguir como roadmap de evolução.
