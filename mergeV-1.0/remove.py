@@ -1,9 +1,9 @@
-# remove.py evoluído, completo e funcional para Merge
 import os
 import shutil
+import asyncio
 from sandbox import Sandbox
 from hooks import HooksManager
-from logs import stage, info, warn, error
+from logs import info, warn, error, stage
 
 class Remover:
     def __init__(self, install_prefix: str = '/usr/local', dry_run: bool = False, silent: bool = False):
@@ -11,17 +11,16 @@ class Remover:
         self.dry_run = dry_run
         self.silent = silent
 
-    def remove_package(self, package) -> bool:
+    async def remove_package(self, package) -> bool:
         stage(f'Removing package {package.name}')
         sb = Sandbox(install_prefix=self.install_prefix)
         hooks = HooksManager(sb, dry_run=self.dry_run, silent=self.silent)
         success = True
-
         try:
             # Run pre-remove hooks
             hooks.run_hooks(package.hooks.get('pre_remove', []))
 
-            # Remove diretórios principais do pacote
+            # Remove main directories
             dirs_to_remove = [os.path.join(self.install_prefix, package.name)]
             for dir_path in dirs_to_remove:
                 if os.path.exists(dir_path):
@@ -33,7 +32,7 @@ class Remover:
                 else:
                     warn(f'Directory {dir_path} does not exist')
 
-            # Remove arquivos adicionais (logs, caches, etc.) se definido
+            # Remove additional files (logs, caches, etc.) if defined
             extra_files = getattr(package, 'extra_files', [])
             for file_path in extra_files:
                 if os.path.exists(file_path):
@@ -42,6 +41,8 @@ class Remover:
                     else:
                         os.remove(file_path)
                         info(f'Removed file {file_path}')
+                else:
+                    warn(f'File {file_path} does not exist')
 
             # Run post-remove hooks
             hooks.run_hooks(package.hooks.get('post_remove', []))
@@ -49,11 +50,11 @@ class Remover:
         except Exception as e:
             error(f'Failed to remove {package.name}: {e}')
             success = False
-
-        sb.cleanup()
+        finally:
+            sb.cleanup()
         return success
 
-    def remove_packages_orphans(self, packages_list) -> None:
+    async def remove_packages_orphans(self, packages_list) -> None:
         stage('Removing orphaned packages')
         for pkg in packages_list:
-            self.remove_package(pkg)
+            await self.remove_package(pkg)
