@@ -10,26 +10,27 @@ RESET = "\033[0m"
 
 
 def sync_recipes():
+    """Sincroniza todas as receitas do repositório Git para um diretório local"""
     repo_url = cfg.get("global", "repo_url", fallback=None)
-    repo_path = cfg.get("global", "repo_path", fallback="/var/lib/merge/repo")
+    recipes_dir = cfg.get("global", "recipes_dir", fallback="/var/lib/merge/recipes")
 
     if not repo_url:
         print(f"{RED}Nenhum repositório Git definido em /etc/merge.conf (repo_url).{RESET}")
         return False
 
-    os.makedirs(repo_path, exist_ok=True)
+    os.makedirs(recipes_dir, exist_ok=True)
 
     try:
-        if not os.path.exists(os.path.join(repo_path, ".git")):
-            print(f"{YELLOW}[SYNC]{RESET} Clonando repositório de receitas...")
+        if not os.path.exists(os.path.join(recipes_dir, ".git")):
+            print(f"{YELLOW}[SYNC]{RESET} Clonando repositório de receitas para {recipes_dir} ...")
             subprocess.run(
-                ["git", "clone", repo_url, repo_path],
+                ["git", "clone", repo_url, recipes_dir],
                 check=True
             )
         else:
-            print(f"{YELLOW}[SYNC]{RESET} Atualizando repositório de receitas...")
+            print(f"{YELLOW}[SYNC]{RESET} Atualizando repositório de receitas em {recipes_dir} ...")
             subprocess.run(
-                ["git", "-C", repo_path, "pull", "--rebase"],
+                ["git", "-C", recipes_dir, "pull", "--rebase"],
                 check=True
             )
         print(f"{GREEN}[SYNC]{RESET} Repositório sincronizado com sucesso.")
