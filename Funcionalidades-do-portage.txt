@@ -1,3 +1,50 @@
+/
+├─ bin/                 # Binários essenciais do sistema
+├─ boot/                # Arquivos de inicialização, kernels, bootloader
+├─ dev/                 # Dispositivos do sistema
+├─ etc/                 # Configurações do sistema
+│  ├─ portage/          # Configurações específicas do Portage
+│  │  ├─ make.conf      # Configuração global de compilação
+│  │  ├─ package.accept_keywords/  # Permissões de versões específicas
+│  │  ├─ package.mask/  # Pacotes e versões mascaradas
+│  │  ├─ package.unmask/ # Pacotes desmascarados
+│  │  └─ repos.conf     # Repositórios Portage
+├─ home/                # Diretórios de usuários
+├─ lib/                 # Bibliotecas essenciais
+├─ media/               # Diretório para media (opcional)
+├─ mnt/                 # Pontos de montagem temporários
+├─ opt/                 # Aplicativos opcionais
+├─ proc/                # Sistema de arquivos virtual /proc
+├─ root/                # Diretório do superusuário
+├─ sbin/                # Binários do sistema essenciais para root
+├─ srv/                 # Dados de serviços fornecidos pelo sistema
+├─ tmp/                 # Arquivos temporários
+├─ usr/                 # Binários, bibliotecas e documentação de usuário
+│  ├─ bin/              # Binários de usuários
+│  ├─ lib/              # Bibliotecas de usuários
+│  ├─ sbin/             # Binários de sistema
+│  └─ portage/          # Diretório local do Portage (alternativo)
+├─ var/                 # Dados variáveis
+│  ├─ db/               # Banco de dados do Portage
+│  ├─ cache/            # Cache de downloads do Portage
+│  ├─ lib/portage/      # Arquivos internos do Portage
+│  ├─ log/portage/      # Logs do Portage
+│  └─ tmp/portage/      # Diretório de trabalho de compilação do Portage
+└─ usr/portage/         # Árvores de ebuilds oficiais do Portage
+    ├─ app/             # Aplicativos diversos
+    │  ├─ editors/      # Editores de texto
+    │  ├─ office/       # Pacotes de escritório
+    │  └─ misc/         # Outros aplicativos
+    ├─ dev/             # Ferramentas de desenvolvimento
+    │  ├─ lang/         # Compiladores e linguagens
+    │  └─ vcs/          # Controle de versão
+    ├─ sys/             # Pacotes do sistema
+    │  ├─ kernel/       # Kernel Linux
+    │  ├─ libraries/    # Bibliotecas essenciais
+    │  └─ init/         # Init systems e serviços
+    └─ virtual/         # Pacotes virtuais (dependências simbólicas)
+//////////////////////////////////////////////////////////////////////////
+
 # Emerge/Portage - Funcionalidades e Suporte
 
 Este documento lista as funcionalidades e recursos que o Portage e seu CLI `emerge` suportam, como referência para comparação com o Merge.
