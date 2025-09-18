@@ -1,16 +1,21 @@
+# install.py refatorado com suporte completo a hooks
+
 import os
 from recipe import Recipe
 from download import Downloader
 from extract import Extractor
 from patch import PatchApplier
 from sandbox import Sandbox
+from hooks import HooksManager
 from logs import stage, info, error
 
 class Installer:
-    def __init__(self, install_prefix: str = '/usr/local'):
+    def __init__(self, install_prefix: str = '/usr/local', dry_run: bool = False, silent: bool = False):
         self.downloader = Downloader()
         self.extractor = Extractor()
         self.install_prefix = install_prefix
+        self.dry_run = dry_run
+        self.silent = silent
 
     def install_recipe(self, recipe: Recipe, build_commands: list = None) -> bool:
         stage(f'Starting installation for recipe {recipe.name}')
@@ -32,24 +37,36 @@ class Installer:
 
         # 4. Sandbox build and install
         sb = Sandbox(install_prefix=self.install_prefix)
+        hooks = HooksManager(sb, dry_run=self.dry_run, silent=self.silent)
         success = True
         for dir_path in extracted_dirs:
-            if not sb.build_and_install(dir_path, build_commands=build_commands):
+            try:
+                # Run pre-configure hooks
+                hooks.run_hooks(recipe.hooks.get('pre_configure', []))
+
+                # Build/Compile inside sandbox
+                if build_commands:
+                    for cmd in build_commands:
+                        if self.dry_run:
+                            info(f'DRY-RUN: Would execute build command: {cmd}')
+                        else:
+                            sb.run_command(cmd.split(), cwd=dir_path)
+
+                # Run post-configure hooks
+                hooks.run_hooks(recipe.hooks.get('post_configure', []))
+                hooks.run_hooks(recipe.hooks.get('pre_compile', []))
+                # Assuming make install or similar
+                sb.build_and_install(dir_path, build_commands=build_commands)
+                hooks.run_hooks(recipe.hooks.get('post_compile', []))
+
+                # Run pre/post install hooks
+                hooks.run_hooks(recipe.hooks.get('pre_install', []))
+                hooks.run_hooks(recipe.hooks.get('post_install', []))
+
+            except Exception as e:
+                error(f'Installation failed for {recipe.name} in {dir_path}: {e}')
                 success = False
                 break
 
         sb.cleanup()
-
-        if success:
-            info(f'Recipe {recipe.name} installed successfully')
-        else:
-            error(f'Recipe {recipe.name} failed to install')
-
         return success
-
-# Teste rápido
-if __name__ == '__main__':
-    from recipe import Recipe
-    test_recipe = Recipe(os.path.expanduser('~/.merge/repo/foo.yaml'))
-    installer = Installer()
-    installer.install_recipe(test_recipe)
