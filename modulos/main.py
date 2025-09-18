@@ -1,5 +1,5 @@
 import sys
-from .install import install_package
+from .install import install_with_resolver
 from .remove import remove_package
 from .repository import list_packages
 
@@ -9,7 +9,7 @@ merge - Gerenciador de pacotes avançado
 
 Comandos:
     install <pacote> [--mode <recipe|binary|dir>] [--source <caminho>]
-        - Instala um pacote. Por padrão, usa recipe.yaml.
+        - Instala um pacote e todas as dependências em ordem topológica
         - --mode recipe   : usa recipe.yaml (sandbox)
         - --mode binary   : instala binário (tar.gz)
         - --mode dir      : instala diretório local usando fakeroot
@@ -43,7 +43,7 @@ def main():
             if source_index < len(sys.argv):
                 source = sys.argv[source_index]
 
-        install_package(package_name, mode=mode, source_path=source)
+        install_with_resolver(package_name, mode=mode, source_path=source)
 
     elif cmd == "remove" and len(sys.argv) == 3:
         remove_package(sys.argv[2])
