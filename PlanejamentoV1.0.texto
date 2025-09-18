@@ -1,0 +1,169 @@
+# Merge - Funcionalidades Planejadas
+
+## Estrutura de Diretórios
+
+/merge/
+├─ main.py                # CLI principal
+├─ merge                  # Executa o main.py (binário)
+├─ config.py              # Configurações globais
+├─ logs.py                # Logs coloridos e estágios
+├─ recipe.py              # Carrega receitas YAML e hooks
+├─ uses.py                # Gerencia USE flags persistentes
+├─ dependency.py          # Resolver dependências build/runtime
+├─ download.py            # Multi-download (HTTP/Git)
+├─ extract.py             # Descompactação universal
+├─ patch.py               # Aplicação automática de múltiplos patches
+├─ sandbox.py             # Executa comandos em sandbox seguro
+├─ install.py             # Instalação completa com compilação
+├─ remove.py              # Remoção de pacotes com hooks
+├─ depclean.py            # Depclean/deepclean inteligente
+├─ revdep.py              # Corrige problemas links quebrados
+├─ update.py              # Procura novas versões nas fontes oficiais
+├─ upgrade.py             # Atualiza pacotes escolhidos pelo usuário
+└─ repo/                  # Diretório das receitas YAML
+
+---
+
+## Funcionalidades Planejadas
+
+### CLI (main.py)
+
+* Comandos abreviados e longos:
+
+  * `merge i`  → Instala pacote (download, extrair, patch, compile, install)
+  * `merge b`  → Apenas build (download, extrair, patch, compile)
+  * `merge d`  → Apenas download
+  * `merge e`  → Apenas extrair
+  * `merge s`  → Verifica se o programa está instalado
+  * `merge si` → Mostra informações sobre o programa
+  * `merge u`  → Update (verifica novas versões)
+  * `merge up` → Upgrade (atualiza pacotes)
+  * `merge r`  → Remove pacote
+  * `merge use [+flag|-flag]` → Gerencia USE flags
+  * `merge depclean` → Remove pacotes órfãos
+
+**Melhorias adicionais:**
+
+* Autocomplete (bash, zsh, fish)
+* Modo "dry run"
+* Confirmações interativas ou modo silencioso
+* Barra de progresso para downloads/compilações
+* Mensagens traduzíveis (i18n)
+
+### Sandbox (sandbox.py)
+
+* Executa todos os comandos em diretório isolado
+* Uso de fakeroot para permissões simuladas
+* Limitação de acesso a diretórios críticos
+* Controle de CPU/memória via ulimit
+* Suporte futuro a namespaces/containers
+* Logs separados por sandbox
+
+### Instalação (install.py)
+
+* Download múltiplo (HTTP/HTTPS/Git)
+* Extração automática: tar.gz, bz2, xz, zip
+* Aplicação de múltiplos patches
+* Hooks: pre/post configure, build, compile
+* Suporte a make, cmake, meson, autotools
+* Número de jobs configurável
+* COMMON\_FLAGS configuráveis
+* Instalação no prefix configurado (/usr/local)
+* Cache de builds para evitar recompilações desnecessárias
+* Verificação de integridade: checksums, GPG
+
+### Remoção (remove.py)
+
+* Hooks: pre\_remove, post\_remove
+* Remoção de diretórios, arquivos e dependências órfãs
+* Dry run para remoção
+* Logs coloridos e animações opcionais
+
+### USE Flags (uses.py)
+
+* Definidas em receitas YAML
+* Ativação/desativação persistente
+* Dependências associadas instaladas automaticamente
+* Registro histórico de flags ativas
+* Suporte a dependências opcionais além das USE flags
+* Tratamento de conflitos entre flags
+
+### Depclean/Deepclean (depclean.py)
+
+* Identificação de pacotes órfãos
+* Remoção de dependências de USE flags desativadas
+* Deepclean para limpeza agressiva
+* Integração com remove.py
+* Dry run para segurança
+
+### Dependências (dependency.py)
+
+* Resolução topológica de dependências
+* Considera USE flags ativas
+* Detecta conflitos de versões e dependências circulares
+* Define versões mínimas/máximas
+
+### Receitas (recipe.py)
+
+* Formato YAML estruturado
+* Campos principais:
+
+  * name: nome do pacote
+  * version: versão atual
+  * src\_uri: lista de URLs (HTTP/Git)
+  * dependencies: build/runtime
+  * use\_flags: flags e dependências associadas
+  * patches: lista de patches
+  * hooks: pre/post configure, build, compile, remove
+  * update\_source: onde buscar versões mais novas
+
+    * type: http, git, github, pypi, etc.
+    * url: link do repositório ou página de releases
+    * pattern: regex para identificar versão no nome do arquivo/tag
+* Definir campos obrigatórios/ opcionais
+* Versionamento claro entre receita e pacote instalado
+
+### Update (update.py)
+
+* Percorre todas as receitas em `repo/`
+* Para cada pacote:
+
+  * Lê versão instalada de um `state.json`
+  * Consulta `update_source` (HTTP, Git, API etc.)
+  * Extrai versão mais recente
+  * Compara com a instalada
+* Gera lista de pacotes desatualizados → `~/.merge/update_list.json`
+* Exibe relatório amigável:
+
+  ```
+  update: encontrados 2 pacotes novos
+  - foo 1.2.0 → 1.3.0
+  - bar 2.5.1 → 2.6.0
+  ```
+
+### Upgrade (upgrade.py)
+
+* Lê `~/.merge/update_list.json`
+* Pergunta ao usuário:
+
+  * Atualizar todos
+  * Selecionar manualmente
+  * Atualizar apenas pacotes passados por argumento (`merge up foo bar`)
+* Executa pipeline normal de instalação para os pacotes escolhidos
+* Atualiza metadados (`state.json`) com nova versão
+* Suporta rollback em caso de falha
+* Opção `--all` para modo automático
+* Integração com logs, dry run e hooks
+
+---
+
+## Requisitos adicionais
+
+* **Documentação**: manual CLI, exemplos de recipes, tutorial
+* **Testes**: unitários, integração, CI para validar recipes
+* **Segurança**: sandbox restrito, validação de insumos externos
+* **Logs e debug**: níveis de log, gravação em arquivos, formato estruturado
+* **Empacotamento**: distribuição do Merge em pacotes (.deb, .rpm, tarball)
+* **Fallbacks/rollbacks**: estado consistente mesmo em falhas
+* **Internacionalização**: suporte a múltiplos idiomas
+* **Extensibilidade**: sistema de plugins/hooks adicionais
