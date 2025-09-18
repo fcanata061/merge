@@ -1,4 +1,4 @@
-# main.py - CLI completo do Merge
+# main.py - CLI completo do Merge com barra de progresso, dry-run, modo silencioso e autocompletar
 
 import sys
 import argparse
@@ -9,6 +9,8 @@ from remove import Remover
 from sync import SyncManager
 from rootdir import RootDirManager
 from recipe import list_recipes, Recipe
+from tqdm import tqdm
+import readline
 
 # Map abreviações para comandos
 COMMAND_MAP = {
@@ -36,7 +38,24 @@ def confirm(prompt, silent=False):
     resp = input(f'{prompt} [y/N]: ').strip().lower()
     return resp in ['y', 'yes']
 
+# Função para barra de progresso em listas
+def progress_iterable(iterable, desc='Processing'):
+    return tqdm(iterable, desc=desc, unit='item')
+
+# Autocomplete para nomes de pacotes
+def completer(text, state):
+    options = [pkg for pkg in COMMAND_MAP.keys()] + [pkg for pkg in list(recipes.keys())]
+    matches = [s for s in options if s.startswith(text)]
+    if state < len(matches):
+        return matches[state]
+    else:
+        return None
+
+readline.parse_and_bind('tab: complete')
+readline.set_completer(completer)
+
 def main():
+    global recipes
     parser = argparse.ArgumentParser(description='Merge System CLI')
     parser.add_argument('command', nargs='?', help='Command to execute', choices=COMMAND_MAP.keys())
     parser.add_argument('package', nargs='?', help='Package name')
@@ -82,16 +101,17 @@ def main():
         if args.package not in recipes:
             error(f'Package {args.package} not found')
             sys.exit(1)
-        installer.install_recipe(recipes[args.package].recipe)
+        for _ in progress_iterable([recipes[args.package]], desc='Installing package'):
+            installer.install_recipe(recipes[args.package].recipe)
 
     # Comando: remove
     elif cmd == 'recompile_one' or cmd == 'remove':
         if args.package not in recipes:
             error(f'Package {args.package} not found')
             sys.exit(1)
-        remover.remove_package(recipes[args.package].recipe)
+        for _ in progress_iterable([recipes[args.package]], desc='Removing package'):
+            remover.remove_package(recipes[args.package].recipe)
 
-    # Outros comandos podem ser integrados aqui (upgrade, update, build, etc.)
     else:
         warn(f'Command {cmd} is recognized but not implemented in this CLI version')
 
