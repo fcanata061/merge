@@ -12,6 +12,7 @@ from .remove import remove_package
 from .repository import list_packages, package_exists
 from .recipe import load_recipe
 from .logs import log
+from .sync import sync_recipes
 
 # Cores para saída
 GREEN = "\033[92m"
@@ -35,6 +36,7 @@ Comandos:
   list (l)                 Lista pacotes disponíveis
   search (s) <nome>        Procura pacotes
   info (nfo) <pacote>      Mostra informações do pacote
+  sync (y)                 Sincroniza receitas do repositório Git
   help (h)                 Mostra esta ajuda
 """)
 
@@ -125,6 +127,9 @@ def main():
 
     elif cmd in ["help", "h"]:
         print_help()
+
+    elif cmd in ["sync", "y"]:
+    sync_recipes()
 
     else:
         print_help()
