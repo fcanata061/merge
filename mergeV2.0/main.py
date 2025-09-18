@@ -19,7 +19,6 @@ class Colors:
 HISTORY_FILE = os.path.expanduser("~/.merge_history")
 
 def confirm(prompt="Deseja continuar? (s/n): "):
-    """Confirmação do usuário com segurança."""
     if not sys.stdin.isatty():
         return True
     resp = input(prompt).strip().lower()
@@ -39,13 +38,12 @@ def load_history():
             pass
 
 def setup_autocomplete(recipe_manager):
-    """Configura autocomplete para comandos e receitas."""
     commands = [
         "sync", "list", "install", "remove", "update", "upgrade",
         "download", "extract", "patch", "dependencies",
-        "sandbox", "hooks", "uses", "exit", "quit"
+        "sandbox", "hooks", "uses", "deepclean", "depclean",
+        "exit", "quit"
     ]
-
     def completer(text, state):
         buffer = readline.get_line_buffer()
         tokens = buffer.split()
@@ -58,67 +56,45 @@ def setup_autocomplete(recipe_manager):
         if state < len(options):
             return options[state]
         return None
-
     readline.set_completer(completer)
     readline.parse_and_bind("tab: complete")
 
-def print_ok(msg):
-    print(f"{Colors.OK}[OK]{Colors.END} {msg}")
+def print_ok(msg): print(f"{Colors.OK}[OK]{Colors.END} {msg}")
+def print_warn(msg): print(f"{Colors.WARNING}[AVISO]{Colors.END} {msg}")
+def print_error(msg): print(f"{Colors.ERROR}[ERRO]{Colors.END} {msg}")
 
-def print_warn(msg):
-    print(f"{Colors.WARNING}[AVISO]{Colors.END} {msg}")
+def deepclean(recipe_manager):
+    if not confirm("Deseja executar DEEPCLEAN em todas as receitas? Isso é irreversível! (s/n): "):
+        print_warn("Operação deepclean cancelada.")
+        return
+    print_warn("Iniciando DEEPCLEAN...")
+    for rec in recipe_manager.list_recipes():
+        try:
+            remove.remove_recipe(rec)
+            extract.clean_recipe(rec)
+            sandbox.clean_sandbox(rec)
+        except Exception as e:
+            logs.log_error(f"Erro ao limpar {rec.name}: {e}")
+            print_error(f"Erro ao limpar {rec.name}: {e}")
+    print_ok("DEEPCLEAN concluído com sucesso!")
 
-def print_error(msg):
-    print(f"{Colors.ERROR}[ERRO]{Colors.END} {msg}")
-
-def main():
-    logs.setup_logging()
-    sync_manager = sync.SyncManager()
-    recipe_manager = recipe.RecipeManager(sync_manager.list_recipes())
-
-    setup_autocomplete(recipe_manager)
-    load_history()
-
-    if len(sys.argv) > 1:
-        # Modo CLI direto
-        main_command(sys.argv[1:], sync_manager, recipe_manager)
-    else:
-        # Modo interativo
-        print(f"{Colors.HEADER}Merge CLI - Digite 'exit' para sair{Colors.END}")
-        while True:
-            try:
-                cmd_input = input("> ").strip()
-                if cmd_input.lower() in ("exit", "quit"):
-                    break
-                if not cmd_input:
-                    continue
-                sys.argv = ["main.py"] + cmd_input.split()
-                main_command(sys.argv[1:], sync_manager, recipe_manager)
-            except KeyboardInterrupt:
-                print("\nSaindo...")
-                break
-            except Exception as e:
-                print_error(f"Erro inesperado: {e}")
-            finally:
-                save_history()
+def depclean(recipe_manager):
+    print_warn("Iniciando DEPCLEAN...")
+    dependency.remove_unused_dependencies()
+    print_ok("DEPCLEAN concluído com sucesso!")
 
 def main_command(args, sync_manager, recipe_manager):
     if not args:
         print_warn("Nenhum comando informado.")
         return
-
-    cmd = args[0]
-    cmd_args = args[1:]
-
+    cmd, cmd_args = args[0], args[1:]
     try:
         if cmd == "sync":
             sync_manager.sync_repo()
             print_ok("Repositório sincronizado com sucesso!")
 
         elif cmd == "list":
-            recipes = recipe_manager.list_recipes()
-            print_ok("Receitas disponíveis:")
-            for r in recipes:
+            for r in recipe_manager.list_recipes():
                 print(f" - {r.name}")
 
         elif cmd == "install":
@@ -131,7 +107,7 @@ def main_command(args, sync_manager, recipe_manager):
                 print_error(f"Receita '{rec_name}' não encontrada.")
                 return
             if confirm(f"Deseja instalar {rec_name}? "):
-                install.install_recipe(rec)
+                sandbox.run_in_sandbox(lambda: install.install_recipe(rec))
                 print_ok(f"{rec_name} instalado com sucesso!")
 
         elif cmd == "remove":
@@ -144,15 +120,15 @@ def main_command(args, sync_manager, recipe_manager):
                 print_error(f"Receita '{rec_name}' não encontrada.")
                 return
             if confirm(f"Deseja remover {rec_name}? "):
-                remove.remove_recipe(rec)
+                sandbox.run_in_sandbox(lambda: remove.remove_recipe(rec))
                 print_ok(f"{rec_name} removido com sucesso!")
 
         elif cmd == "update":
-            update.update_all()
+            sandbox.run_in_sandbox(update.update_all)
             print_ok("Atualização concluída!")
 
         elif cmd == "upgrade":
-            upgrade.upgrade_system()
+            sandbox.run_in_sandbox(upgrade.upgrade_system)
             print_ok("Sistema atualizado!")
 
         elif cmd == "download":
@@ -162,7 +138,7 @@ def main_command(args, sync_manager, recipe_manager):
             rec_name = cmd_args[0]
             rec = recipe_manager.get_recipe(rec_name)
             if rec:
-                download.download_recipe(rec)
+                sandbox.run_in_sandbox(lambda: download.download_recipe(rec))
                 print_ok(f"{rec_name} baixado com sucesso!")
             else:
                 print_error(f"Receita '{rec_name}' não encontrada.")
@@ -174,13 +150,13 @@ def main_command(args, sync_manager, recipe_manager):
             rec_name = cmd_args[0]
             rec = recipe_manager.get_recipe(rec_name)
             if rec:
-                extract.extract_recipe(rec)
+                sandbox.run_in_sandbox(lambda: extract.extract_recipe(rec))
                 print_ok(f"{rec_name} extraído com sucesso!")
             else:
                 print_error(f"Receita '{rec_name}' não encontrada.")
 
         elif cmd == "patch":
-            patch.apply_patches()
+            sandbox.run_in_sandbox(patch.apply_patches)
             print_ok("Patches aplicados com sucesso!")
 
         elif cmd == "dependencies":
@@ -199,9 +175,45 @@ def main_command(args, sync_manager, recipe_manager):
             uses.show_uses()
             print_ok("Exibição de usos concluída!")
 
+        elif cmd == "deepclean":
+            deepclean(recipe_manager)
+
+        elif cmd == "depclean":
+            depclean(recipe_manager)
+
         else:
             print_warn(f"Comando '{cmd}' não reconhecido.")
 
     except Exception as e:
         logs.log_error(f"Erro ao executar {cmd}: {e}")
         print_error(f"Erro: {e}")
+
+def main():
+    logs.setup_logging()
+    sync_manager = sync.SyncManager()
+    recipe_manager = recipe.RecipeManager(sync_manager.list_recipes())
+    setup_autocomplete(recipe_manager)
+    load_history()
+
+    if len(sys.argv) > 1:
+        main_command(sys.argv[1:], sync_manager, recipe_manager)
+    else:
+        print(f"{Colors.HEADER}Merge CLI - Digite 'exit' para sair{Colors.END}")
+        while True:
+            try:
+                cmd_input = input("> ").strip()
+                if cmd_input.lower() in ("exit", "quit"):
+                    break
+                if not cmd_input:
+                    continue
+                main_command(cmd_input.split(), sync_manager, recipe_manager)
+            except KeyboardInterrupt:
+                print("\nSaindo...")
+                break
+            except Exception as e:
+                print_error(f"Erro inesperado: {e}")
+            finally:
+                save_history()
+
+if __name__ == "__main__":
+    main()
