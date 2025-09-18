@@ -69,7 +69,6 @@ class DependencyManager:
             if pkg in visited:
                 if version_constraint:
                     version_constraints[pkg].append(version_constraint)
-                    # tenta sugerir melhor versão
                     r = self.recipes[pkg]
                     current_version = Version(resolved_versions[pkg])
                     best_version = current_version
@@ -108,6 +107,7 @@ class DependencyManager:
             active_flags = self.use_manager.get_flags(pkg)
             for flag in active_flags:
                 deps.extend(r.dependencies.get(flag, []))
+
             for d in deps:
                 if isinstance(d, tuple):
                     dep_name, dep_version = d
@@ -122,14 +122,42 @@ class DependencyManager:
         return resolved
 
     def suggest_final_versions(self, packages: List[str], build: bool = True) -> Dict[str, str]:
-        """
-        Sugere a versão final de cada pacote para instalação,
-        resolvendo automaticamente conflitos.
-        """
+        """Sugere versão final de cada pacote para instalação, resolvendo conflitos."""
         final_versions: Dict[str, str] = {}
         for pkg in packages:
             self.resolve_dependencies(pkg, build, resolved_versions=final_versions)
         return final_versions
+
+    def get_installation_plan(self, packages: List[str], build: bool = True) -> List[str]:
+        """
+        Gera plano de instalação sequencial:
+        - Dependências instaladas antes dos pacotes que dependem delas.
+        """
+        final_versions = self.suggest_final_versions(packages, build)
+        installed = set()
+        plan = []
+
+        def _add_pkg(pkg: str):
+            if pkg in installed:
+                return
+            r = self.recipes.get(pkg)
+            if not r:
+                warn(f'Dependência {pkg} não encontrada')
+                return
+            deps = r.dependencies.get('build' if build else 'runtime', [])
+            active_flags = self.use_manager.get_flags(pkg)
+            for flag in active_flags:
+                deps.extend(r.dependencies.get(flag, []))
+            for d in deps:
+                dep_name = d[0] if isinstance(d, tuple) else d
+                _add_pkg(dep_name)
+            installed.add(pkg)
+            plan.append(f"{pkg}-{final_versions[pkg]}")
+
+        for pkg in packages:
+            _add_pkg(pkg)
+
+        return plan
 
     def get_dependency_tree(self, package_name: str, build: bool = True, level: int = 0) -> str:
         tree_str = ''
@@ -162,21 +190,22 @@ class DependencyManager:
 # Exemplo de uso
 if __name__ == '__main__':
     dm = DependencyManager()
-    pkg = 'foo'
+    packages = ['foo', 'bar', 'baz']
 
-    print('Lista de dependências resolvidas:')
-    print(dm.resolve_dependencies(pkg))
+    print('Versões finais sugeridas:')
+    final_versions = dm.suggest_final_versions(packages)
+    for pkg, ver in final_versions.items():
+        print(f'{pkg}: {ver}')
+
+    print('\nPlano de instalação sequencial:')
+    plan = dm.get_installation_plan(packages)
+    for p in plan:
+        print(p)
 
     print('\nÁrvore de dependências:')
-    print(dm.get_dependency_tree(pkg))
+    print(dm.get_dependency_tree('foo'))
 
-    packages = ['foo', 'bar', 'baz']
-    final_versions = dm.suggest_final_versions(packages)
-    print('\nVersões finais sugeridas para instalação:')
-    for pkg_name, ver in final_versions.items():
-        print(f'{pkg_name}: {ver}')
-
-    parallel_deps = dm.resolve_dependencies_parallel(packages)
     print('\nDependências resolvidas em paralelo:')
+    parallel_deps = dm.resolve_dependencies_parallel(packages)
     for k, v in parallel_deps.items():
         print(f'{k}: {v}')
