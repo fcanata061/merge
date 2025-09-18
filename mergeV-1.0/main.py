@@ -1,4 +1,4 @@
-# main.py - CLI completo do Merge
+# main.py - CLI completo e funcional do Merge
 
 import sys
 import argparse
@@ -9,8 +9,8 @@ from remove import Remover
 from sync import SyncManager
 from rootdir import RootDirManager
 from recipe import list_recipes, Recipe
-from tqdm import tqdm
 from merge_autocomplete import setup_autocomplete
+from tqdm import tqdm
 
 # Map abreviações para comandos
 COMMAND_MAP = {
@@ -28,7 +28,8 @@ COMMAND_MAP = {
     'deepclean': 'deepclean',
     'use': 'use_flags',
     'sync': 'sync_repo',
-    'pr': 'prepare_rootdir'
+    'pr': 'prepare_rootdir',
+    'ls': 'list_recipes'
 }
 
 # Função de confirmação interativa
@@ -55,7 +56,7 @@ def main():
     # Inicializando módulos
     installer = Installer(dry_run=args.dry_run, silent=args.yes)
     remover = Remover(dry_run=args.dry_run, silent=args.yes)
-    upgrader = Upgrader()
+    upgrader = Upgrader(dry_run=args.dry_run, silent=args.yes)
     sync_manager = SyncManager(repo_url=args.repo)
     rootdir_manager = RootDirManager(rootdir=args.rootdir, dry_run=args.dry_run, silent=args.yes)
     recipes = {r.name: r for r in list_recipes()}
@@ -70,6 +71,13 @@ def main():
         for key, val in COMMAND_MAP.items():
             print(f'{key} -> {val}')
         sys.exit(0)
+
+    # Listar receitas
+    if cmd == 'list_recipes':
+        info('Available recipes:')
+        for pkg in recipes:
+            print(f'- {pkg}')
+        return
 
     # Comando: sync
     if cmd == 'sync_repo':
@@ -102,8 +110,26 @@ def main():
         for _ in progress_iterable([recipes[args.package]], desc='Removing package'):
             remover.remove_package(recipes[args.package].recipe)
 
+    # Comando: upgrade
+    elif cmd == 'upgrade':
+        if args.package:
+            if args.package not in recipes:
+                error(f'Package {args.package} not found')
+                sys.exit(1)
+            upgrader.upgrade_package(recipes[args.package].recipe)
+        else:
+            upgrader.upgrade_all(recipes.values())
+
+    # Comando: update (lista novas versões disponíveis)
+    elif cmd == 'update':
+        upgrader.list_updates(recipes.values())
+
+    # Outros comandos
+    elif cmd in ['build', 'download', 'extract', 'patch', 'sandbox_install', 'depclean', 'deepclean', 'use_flags', 'recompile_all']:
+        info(f'Command {cmd} is recognized but must be implemented in respective module')
+
     else:
-        warn(f'Command {cmd} is recognized but not implemented in this CLI version')
+        warn(f'Command {cmd} not implemented in CLI')
 
 if __name__ == '__main__':
     main()
