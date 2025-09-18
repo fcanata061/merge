@@ -1,4 +1,4 @@
-# main.py - CLI completo do Merge com barra de progresso, dry-run, modo silencioso e autocompletar
+# main.py - CLI completo do Merge
 
 import sys
 import argparse
@@ -10,7 +10,7 @@ from sync import SyncManager
 from rootdir import RootDirManager
 from recipe import list_recipes, Recipe
 from tqdm import tqdm
-import readline
+from merge_autocomplete import setup_autocomplete
 
 # Map abreviações para comandos
 COMMAND_MAP = {
@@ -38,24 +38,11 @@ def confirm(prompt, silent=False):
     resp = input(f'{prompt} [y/N]: ').strip().lower()
     return resp in ['y', 'yes']
 
-# Função para barra de progresso em listas
+# Função para barra de progresso
 def progress_iterable(iterable, desc='Processing'):
     return tqdm(iterable, desc=desc, unit='item')
 
-# Autocomplete para nomes de pacotes
-def completer(text, state):
-    options = [pkg for pkg in COMMAND_MAP.keys()] + [pkg for pkg in list(recipes.keys())]
-    matches = [s for s in options if s.startswith(text)]
-    if state < len(matches):
-        return matches[state]
-    else:
-        return None
-
-readline.parse_and_bind('tab: complete')
-readline.set_completer(completer)
-
 def main():
-    global recipes
     parser = argparse.ArgumentParser(description='Merge System CLI')
     parser.add_argument('command', nargs='?', help='Command to execute', choices=COMMAND_MAP.keys())
     parser.add_argument('package', nargs='?', help='Package name')
@@ -65,14 +52,6 @@ def main():
     parser.add_argument('--rootdir', default='/mnt/merge-root', help='Rootdir for chroot preparation')
     args = parser.parse_args()
 
-    cmd = COMMAND_MAP.get(args.command, None)
-
-    if cmd is None:
-        print('Available commands:')
-        for key, val in COMMAND_MAP.items():
-            print(f'{key} -> {val}')
-        sys.exit(0)
-
     # Inicializando módulos
     installer = Installer(dry_run=args.dry_run, silent=args.yes)
     remover = Remover(dry_run=args.dry_run, silent=args.yes)
@@ -80,6 +59,17 @@ def main():
     sync_manager = SyncManager(repo_url=args.repo)
     rootdir_manager = RootDirManager(rootdir=args.rootdir, dry_run=args.dry_run, silent=args.yes)
     recipes = {r.name: r for r in list_recipes()}
+
+    # Configurar autocompletar
+    setup_autocomplete(COMMAND_MAP, recipes)
+
+    cmd = COMMAND_MAP.get(args.command, None)
+
+    if cmd is None:
+        print('Available commands:')
+        for key, val in COMMAND_MAP.items():
+            print(f'{key} -> {val}')
+        sys.exit(0)
 
     # Comando: sync
     if cmd == 'sync_repo':
