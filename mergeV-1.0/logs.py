@@ -1,5 +1,6 @@
 import sys
 import datetime
+import logging
 
 # ANSI colors
 RESET = '\033[0m'
@@ -34,11 +35,9 @@ def _write(message: str):
         with open(LOG_FILE, 'a') as f:
             f.write(full_message + '\n')
 
-
 def log(message: str, level: str = 'INFO'):
     color = LEVELS.get(level.upper(), '')
     _write(f'{color}{level.upper():<7}{RESET} {message}')
-
 
 def info(message: str):
     log(message, 'INFO')
