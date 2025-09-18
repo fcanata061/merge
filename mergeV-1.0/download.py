@@ -17,6 +17,7 @@ class Downloader:
             parsed = urlparse(uri)
             filename = os.path.basename(parsed.path)
             dest_path = os.path.join(self.build_dir, filename)
+
             if parsed.scheme in ['http', 'https']:
                 if not os.path.exists(dest_path):
                     stage(f'Downloading {filename}...')
@@ -32,6 +33,7 @@ class Downloader:
                         continue
                 else:
                     info(f'{filename} already exists, skipping')
+
             elif parsed.scheme in ['git', 'ssh'] or uri.endswith('.git'):
                 if not os.path.exists(dest_path):
                     stage(f'Cloning {uri}...')
@@ -43,10 +45,13 @@ class Downloader:
                         continue
                 else:
                     info(f'{filename} already cloned, skipping')
+
             else:
                 warn(f'Unknown URI scheme: {uri}, skipping')
                 continue
+
             downloaded_files.append(dest_path)
+
         return downloaded_files
 
 # Teste rápido
