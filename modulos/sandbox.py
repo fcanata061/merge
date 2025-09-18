@@ -1,59 +1,64 @@
 import os
-import shutil
 import subprocess
 from .config import cfg
 from .logs import log
+from pathlib import Path
 
-SANDBOX_BASE = cfg.get("global", "sandbox_path")
-INSTALL_PATH = cfg.get("global", "install_path")
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+CYAN = "\033[96m"
+RESET = "\033[0m"
 
-def run_in_sandbox(commands, package_name):
-    """
-    Executa os comandos de instalação dentro de um sandbox isolado.
-    Se todos os comandos forem bem-sucedidos, copia o conteúdo
-    do sandbox para o diretório final de instalação.
-    """
-    # Caminho do sandbox para este pacote
-    sandbox_dir = os.path.join(SANDBOX_BASE, package_name)
-    
-    # Limpa sandbox antigo se existir
-    if os.path.exists(sandbox_dir):
-        shutil.rmtree(sandbox_dir)
+
+def stage_msg(stage, msg, color=CYAN, end=None):
+    if end is None:
+        print(f"{color}[{stage}]{RESET} {msg}")
+    else:
+        print(f"{color}[{stage}]{RESET} {msg}", end=end)
+
+
+def prepare_sandbox(pkg_name):
+    """Cria diretório temporário para o sandbox do pacote"""
+    workdir = cfg.get("global", "workdir")
+    sandbox_dir = os.path.join(workdir, f"sandbox_{pkg_name}")
     os.makedirs(sandbox_dir, exist_ok=True)
+    return sandbox_dir
 
-    # Variáveis de ambiente para o sandbox
-    env = os.environ.copy()
-    env["MERGE_SANDBOX"] = sandbox_dir
-    env["INSTALL_PATH"] = INSTALL_PATH
 
-    log(f"Iniciando sandbox para '{package_name}' em {sandbox_dir}")
+def run_in_sandbox(commands, pkg_name):
+    """
+    Executa comandos em um sandbox isolado usando unshare + chroot mínimo.
+    Retorna True se todos comandos rodarem com sucesso.
+    """
+    sandbox_dir = prepare_sandbox(pkg_name)
+    workdir = cfg.get("global", "workdir")
 
-    # Executa todos os comandos da recipe
-    for cmd in commands:
-        cmd_expanded = cmd.replace("{install_path}", INSTALL_PATH)
-        try:
-            result = subprocess.run(cmd_expanded, shell=True, check=True, cwd=sandbox_dir, env=env,
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            log(f"[{package_name}] {cmd_expanded}\nSaída: {result.stdout.strip()}")
-        except subprocess.CalledProcessError as e:
-            log(f"ERRO no sandbox de '{package_name}': {cmd_expanded}\n{e.stderr.strip()}")
-            print(f"Falha ao executar comando no sandbox: {cmd_expanded}")
-            return False
-
-    # Copia do sandbox para o install_path
-    dest_dir = os.path.join(INSTALL_PATH, package_name)
-    if os.path.exists(dest_dir):
-        shutil.rmtree(dest_dir)
-    try:
-        shutil.copytree(sandbox_dir, dest_dir)
-        log(f"Pacote '{package_name}' movido do sandbox para {dest_dir}")
-    except Exception as e:
-        log(f"Falha ao mover '{package_name}' do sandbox para {INSTALL_PATH}: {e}")
-        print(f"Erro ao finalizar instalação de '{package_name}'")
+    # Copia o código-fonte para o sandbox
+    srcdir = os.path.join(workdir, pkg_name)
+    if not os.path.exists(srcdir):
+        stage_msg("SANDBOX", f"Diretório fonte {srcdir} não existe!", RED)
         return False
 
-    # Limpa sandbox após instalação
-    shutil.rmtree(sandbox_dir, ignore_errors=True)
-    log(f"Sandbox para '{package_name}' limpo com sucesso")
+    # Limpando sandbox antigo
+    if os.listdir(sandbox_dir):
+        subprocess.run(f"rm -rf {sandbox_dir}/*", shell=True)
 
-    return True
+    subprocess.run(f"cp -r {srcdir}/* {sandbox_dir}/", shell=True, check=True)
+
+    try:
+        for cmd in commands:
+            stage_msg("SANDBOX", f"Executando: {cmd} ... ", CYAN, end="")
+            subprocess.run(
+                f"unshare -pf --mount-proc chroot {sandbox_dir} /bin/bash -c '{cmd}'",
+                shell=True,
+                check=True
+            )
+            print(f"{GREEN}[OK]{RESET}")
+        log(f"Sandbox concluída para {pkg_name}")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"{RED}[FAIL]{RESET}")
+        stage_msg("SANDBOX", f"Erro no sandbox para {pkg_name}: {e}", RED)
+        log(f"Erro no sandbox para {pkg_name}: {e}")
+        return False
