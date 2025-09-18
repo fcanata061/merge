@@ -1,0 +1,128 @@
+# Merge - Funcionalidades Planejadas
+
+## Estrutura de Diretórios
+
+/merge/
+├─ main.py           # CLI principal
+├─ config.py         # Configurações globais
+├─ logs.py           # Logs coloridos e estágios
+├─ recipe.py         # Carrega receitas YAML e hooks
+├─ uses.py           # Gerencia USE flags persistentes
+├─ dependency.py     # Resolver dependências build/runtime
+├─ download.py       # Multi-download (HTTP/Git)
+├─ extract.py        # Descompactação universal
+├─ patch.py          # Aplicação automática de múltiplos patches
+├─ sandbox.py        # Executa comandos em sandbox seguro
+├─ install.py        # Instalação completa com compilação
+├─ remove.py         # Remoção de pacotes com hooks
+├─ depclean.py       # Depclean/deepclean inteligente
+└─ recipes/          # Diretório das receitas YAML
+
+## Funcionalidades Planejadas
+
+### CLI (main.py)
+
+* Comandos abreviados e longos:
+
+  * merge i <pacote> → Instala pacote (download, extrair, patch, compile, install)
+  * merge b <pacote> → Build-only (não instala)
+  * merge c <pacote> → Compile-only
+  * merge r <pacote> → Remove pacote
+  * merge uses <pacote> \[+flag|-flag] → Ativa/desativa USE flags
+  * merge depclean → Remove pacotes órfãos ou dependências de USE desativadas
+* Busca por pacote instalado com símbolo \[✅] se presente
+
+### Sandbox (sandbox.py)
+
+* Executa todos os comandos em diretório isolado
+* Uso de fakeroot para simular permissões
+* Limitação de acesso a diretórios críticos do sistema
+* Possível controle de recursos (CPU, memória) via ulimit
+
+### Instalação (install.py)
+
+* Download múltiplo (HTTP/HTTPS/Git)
+* Descompactação automática de formatos: tar.gz, tar.bz2, tar.xz, zip
+* Aplicação de múltiplos patches
+* Hooks: pre\_build, post\_build, pre\_compile, post\_compile
+* Build usando make com número de jobs configurável
+* Instalação no prefix configurado (/usr/local por padrão)
+
+### Remoção (remove.py)
+
+* Hooks: pre\_remove, post\_remove
+* Remoção de diretórios, arquivos e dependências órfãs
+* Animação opcional ou logs coloridos durante remoção
+
+### USE Flags (uses.py)
+
+* Flags definidas por receita YAML
+* Ativação/desativação persistente via YAML
+* Dependências associadas às flags instaladas automaticamente
+* Registro de quais flags estão ativas
+
+### Depclean/Deepclean (depclean.py)
+
+* Identificação de pacotes órfãos
+* Remoção de dependências de USE flags desativadas
+* Deepclean opcional para limpeza mais agressiva
+* Integração com remove.py e hooks
+
+### Dependências (dependency.py)
+
+* Resolução topológica de dependências build e runtime
+* Considera dependências de USE flags ativas
+* Geração da ordem de compilação correta
+
+### Receitas (recipe.py)
+
+* Formato YAML para receitas
+* Campos principais:
+
+  * src\_uri: lista de URLs (HTTP/Git)
+  * dependencies: build/runtime
+  * use\_flags: flags e dependências associadas
+  * patches: lista de arquivos de patch
+  * hooks: pre\_build, post\_build, pre\_compile, post\_compile, pre\_remove, post\_remove
+
+### Logs (logs.py)
+
+* Logs coloridos para cada estágio
+* Mensagens de erro, aviso e sucesso
+* Opções para debug detalhado
+
+### Configurações (config.py)
+
+* Diretório de trabalho (/var/lib/merge/work)
+* Diretório de receitas (/var/lib/merge/recipes)
+* Caminho de instalação padrão (/usr/local)
+* Número máximo de jobs para make
+
+### Download (download.py)
+
+* Suporte a HTTP, HTTPS e Git
+* Clonagem ou atualização de repositórios Git
+* Download de arquivos múltiplos
+
+### Extração (extract.py)
+
+* Suporte a tar.gz, tar.bz2, tar.xz, zip
+* Extração automática para diretório de build
+
+### Patch (patch.py)
+
+* Aplicação automática de múltiplos patches após extração
+* Diretório padrão de patches: /recipes/<pacote>/patches
+* Integração com sandbox
+
+### Sandbox Integrado
+
+* Todos os builds e remoções ocorrem dentro do sandbox
+* Hooks executados dentro do sandbox
+* Mantém o sistema principal isolado de erros ou scripts maliciosos
+
+### Observações Gerais
+
+* Todos os módulos são interdependentes e devem ser importados via `merge` como pacote Python
+* Projeto inspirado no Portage do Gentoo, mas simplificado e adaptado para Python e YAML
+* Suporte para futuras evoluções: caching de pacotes, slots opcionais, hooks avançados, logging detalhado e UI colorida interativa
