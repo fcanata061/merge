@@ -8,61 +8,64 @@ from .sandbox import run_in_sandbox
 from .logs import log
 from .dependency import DependencyResolver
 
+# Cores
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+CYAN = "\033[96m"
+RESET = "\033[0m"
+
+
+def stage_msg(stage, msg, color=CYAN):
+    """Imprime mensagem de estágio formatada"""
+    print(f"{color}[{stage}]{RESET} {msg}")
+
 
 def fetch_package(pkg):
-    """
-    Baixa os arquivos fonte do pacote
-    """
     recipe = load_recipe(pkg)
     src_uri = recipe.get("src_uri")
     if not src_uri:
-        print(f"Nenhuma URI de origem definida para {pkg}")
+        stage_msg("FETCH", f"Nenhuma URI definida para {pkg}", RED)
         return False
 
     workdir = cfg.get("global", "workdir")
     os.makedirs(workdir, exist_ok=True)
 
     try:
-        print(f"Baixando {pkg} de {src_uri}...")
+        stage_msg("FETCH", f"Baixando {pkg} de {src_uri}")
         subprocess.run(f"wget -c {src_uri} -P {workdir}", shell=True, check=True)
         log(f"Fetch concluído para {pkg}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"Erro no fetch de {pkg}: {e}")
+        stage_msg("FETCH", f"Erro no fetch de {pkg}: {e}", RED)
         return False
 
 
 def extract_package(pkg):
-    """
-    Extrai os arquivos baixados
-    """
     recipe = load_recipe(pkg)
     filename = os.path.basename(recipe.get("src_uri", ""))
     workdir = cfg.get("global", "workdir")
     src_path = os.path.join(workdir, filename)
 
     if not os.path.exists(src_path):
-        print(f"Arquivo fonte não encontrado: {src_path}")
+        stage_msg("EXTRACT", f"Arquivo fonte não encontrado: {src_path}", RED)
         return False
 
     try:
-        print(f"Extraindo {pkg}...")
+        stage_msg("EXTRACT", f"Extraindo {pkg}")
         subprocess.run(f"tar -xf {src_path} -C {workdir}", shell=True, check=True)
         log(f"Extração concluída para {pkg}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"Erro ao extrair {pkg}: {e}")
+        stage_msg("EXTRACT", f"Erro ao extrair {pkg}: {e}", RED)
         return False
 
 
 def patch_package(pkg):
-    """
-    Aplica patches definidos no recipe
-    """
     recipe = load_recipe(pkg)
     patches = recipe.get("patches", [])
     if not patches:
-        print(f"Nenhum patch definido para {pkg}")
+        stage_msg("PATCH", f"Nenhum patch para {pkg}", YELLOW)
         return True
 
     workdir = cfg.get("global", "workdir")
@@ -71,55 +74,44 @@ def patch_package(pkg):
     try:
         for patch in patches:
             patch_file = os.path.join("patches", patch)
-            print(f"Aplicando patch {patch} em {pkg}...")
+            stage_msg("PATCH", f"Aplicando {patch} em {pkg}")
             subprocess.run(f"patch -d {srcdir} -p1 < {patch_file}",
                            shell=True, check=True)
         log(f"Patches aplicados em {pkg}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"Erro ao aplicar patch em {pkg}: {e}")
+        stage_msg("PATCH", f"Erro ao aplicar patch em {pkg}: {e}", RED)
         return False
 
 
 def compile_package(pkg):
-    """
-    Compila o pacote em sandbox
-    """
     commands = get_commands(pkg, section="compile")
     if not commands:
-        print(f"Nenhum comando de compilação definido para {pkg}")
+        stage_msg("COMPILE", f"Nenhum comando de compilação definido para {pkg}", YELLOW)
         return False
 
-    print(f"Compilando {pkg} em sandbox...")
+    stage_msg("COMPILE", f"Compilando {pkg} em sandbox...")
     if not run_in_sandbox(commands, pkg):
-        print(f"Falha ao compilar {pkg}")
+        stage_msg("COMPILE", f"Falha ao compilar {pkg}", RED)
         return False
 
     log(f"Compilação concluída para {pkg}")
+    stage_msg("COMPILE", f"{pkg} compilado com sucesso", GREEN)
     return True
 
 
 def build_package(pkg):
-    """
-    Executa fetch, extract, patch e compile (sem instalar)
-    """
-    print(f"Iniciando build de {pkg} (sem instalação)")
+    stage_msg("BUILD", f"Iniciando build de {pkg} (sem instalação)", YELLOW)
     if not fetch_package(pkg): return False
     if not extract_package(pkg): return False
     if not patch_package(pkg): return False
     if not compile_package(pkg): return False
-    print(f"Build de {pkg} concluído com sucesso")
+    stage_msg("BUILD", f"Build de {pkg} concluído com sucesso", GREEN)
     log(f"Build de {pkg} concluído")
     return True
 
 
 def install_package(package_name, installed=None, mode="recipe", source_path=None):
-    """
-    Instala um pacote em três modos:
-    - recipe: executa comandos do recipe.yaml em sandbox
-    - binary: instala binário pré-compilado (tar.gz)
-    - dir   : copia diretório local para install_path usando fakeroot
-    """
     if installed is None:
         installed = set()
 
@@ -127,7 +119,7 @@ def install_package(package_name, installed=None, mode="recipe", source_path=Non
         return True
 
     if not package_exists(package_name):
-        print(f"Erro: Pacote '{package_name}' não encontrado no repositório.")
+        stage_msg("INSTALL", f"Pacote '{package_name}' não encontrado", RED)
         log(f"Erro: Pacote '{package_name}' não encontrado.")
         return False
 
@@ -137,17 +129,16 @@ def install_package(package_name, installed=None, mode="recipe", source_path=Non
 
     try:
         if mode == "recipe":
-            # executa pipeline completo + install
             if not build_package(package_name):
                 return False
             commands = get_commands(package_name, section="install")
             if not run_in_sandbox(commands, package_name):
-                print(f"Falha ao instalar {package_name}")
+                stage_msg("INSTALL", f"Falha ao instalar {package_name}", RED)
                 return False
 
         elif mode == "binary":
             if not source_path or not os.path.exists(source_path):
-                print("Erro: caminho do binário inválido")
+                stage_msg("INSTALL", f"Binário inválido para {package_name}", RED)
                 return False
             subprocess.run(f"tar -xzf {source_path} -C {install_path}",
                            shell=True, check=True)
@@ -155,48 +146,45 @@ def install_package(package_name, installed=None, mode="recipe", source_path=Non
 
         elif mode == "dir":
             if not source_path or not os.path.exists(source_path):
-                print("Erro: diretório de origem inválido")
+                stage_msg("INSTALL", f"Diretório inválido para {package_name}", RED)
                 return False
             subprocess.run(f"fakeroot cp -r {source_path} {dest_dir}",
                            shell=True, check=True)
             log(f"Pacote '{package_name}' instalado via diretório em {dest_dir}")
 
         else:
-            print(f"Modo '{mode}' não suportado")
+            stage_msg("INSTALL", f"Modo '{mode}' não suportado", RED)
             return False
 
         installed.add(package_name)
-        print(f"Pacote '{package_name}' instalado com sucesso.")
-        log(f"Pacote '{package_name}' instalado com sucesso no modo '{mode}'")
+        stage_msg("INSTALL", f"{package_name} instalado com sucesso", GREEN)
+        log(f"Pacote '{package_name}' instalado no modo '{mode}'")
         return True
 
     except subprocess.CalledProcessError as e:
-        print(f"Erro ao instalar {package_name}: {e}")
+        stage_msg("INSTALL", f"Erro ao instalar {package_name}: {e}", RED)
         log(f"Erro ao instalar {package_name}: {e}")
         return False
 
 
 def install_with_resolver(package_name, mode="recipe", source_path=None):
-    """
-    Resolve dependências com ordenação topológica e instala na ordem correta
-    """
     resolver = DependencyResolver()
     try:
         order = resolver.resolve([package_name])
     except RuntimeError as e:
-        print(f"Erro de dependência: {e}")
+        stage_msg("DEP", f"Erro de dependência: {e}", RED)
         log(f"Erro de dependência: {e}")
         return False
 
-    print(f"Ordem de instalação: {order}")
+    stage_msg("DEP", f"Ordem de instalação: {order}", CYAN)
     log(f"Plano de instalação: {order}")
 
     installed = set()
     for pkg in order:
-        print(f"> Instalando {pkg} ...")
+        stage_msg("INSTALL", f"Iniciando instalação de {pkg}", YELLOW)
         success = install_package(pkg, installed=installed, mode=mode, source_path=source_path)
         if not success:
-            print(f"Falha ao instalar {pkg}")
+            stage_msg("INSTALL", f"Falha ao instalar {pkg}", RED)
             log(f"Falha ao instalar {pkg}")
             return False
 
