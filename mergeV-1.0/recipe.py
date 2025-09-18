@@ -1,25 +1,32 @@
 import os
 import yaml
+import json
+import asyncio
 from typing import List, Dict
-from logs import stage, error, info
+from logs import info, error
 from config import REPO_DIR
 
 class Recipe:
     def __init__(self, path: str):
         self.path = path
-        self.data = self._load_yaml()
+        self.data = self._load_data()
 
-    def _load_yaml(self) -> Dict:
+    def _load_data(self) -> Dict:
         if not os.path.exists(self.path):
             error(f'Recipe file not found: {self.path}')
             return {}
+
         try:
             with open(self.path, 'r') as f:
-                data = yaml.safe_load(f)
-            info(f'Loaded recipe: {os.path.basename(self.path)}')
-            return data
-        except yaml.YAMLError as e:
-            error(f'YAML parse error in {self.path}: {e}')
+                if self.path.endswith('.yaml') or self.path.endswith('.yml'):
+                    return yaml.safe_load(f)
+                elif self.path.endswith('.json'):
+                    return json.load(f)
+                else:
+                    error(f'Unsupported file format: {self.path}')
+                    return {}
+        except (yaml.YAMLError, json.JSONDecodeError) as e:
+            error(f'Error parsing {self.path}: {e}')
             return {}
 
     @property
@@ -54,17 +61,15 @@ class Recipe:
     def update_source(self) -> Dict[str, str]:
         return self.data.get('update_source', {})
 
-# Função para listar todas as receitas disponíveis
-def list_recipes() -> List[Recipe]:
+async def list_recipes() -> List[Recipe]:
     recipes = []
     for file in os.listdir(REPO_DIR):
-        if file.endswith('.yaml') or file.endswith('.yml'):
+        if file.endswith(('.yaml', '.yml', '.json')):
             path = os.path.join(REPO_DIR, file)
             recipes.append(Recipe(path))
-    stage(f'Found {len(recipes)} recipes in repo')
+    info(f'Found {len(recipes)} recipes in repo')
     return recipes
 
 # Teste rápido
 if __name__ == '__main__':
-    for r in list_recipes():
-        info(f'Recipe: {r.name}, version: {r.version}')
+    asyncio.run(list_recipes())
