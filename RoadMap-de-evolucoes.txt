@@ -1,0 +1,122 @@
+# Merge - Possíveis Evoluções Futuras
+
+Este documento lista todas as possibilidades de evolução do Merge, considerando o que já foi implementado e funcionalidades avançadas que podem ser adicionadas.
+
+## 1. Slots (Versionamento Múltiplo)
+
+* Permitir múltiplas versões do mesmo pacote coexistirem.
+* Cada versão teria diretório isolado e prefix dinâmico.
+
+## 2. Sistema de Máscaras
+
+* Permitir “masking” de pacotes para impedir instalação de versões instáveis ou indesejadas.
+* Arquivo YAML ou TXT com pacotes/versões mascaradas.
+
+## 3. Caching de Downloads
+
+* Armazenar arquivos baixados para evitar downloads repetidos.
+* Integrar com sandbox para builds offline.
+
+## 4. Suporte a Metapacotes
+
+* Pacotes que apenas agrupam dependências.
+* Exemplo: “build-essential”, “dev-tools”.
+
+## 5. Logs Detalhados e Histórico
+
+* Registro completo de instalações, remoções, depclean e USE flags.
+* Permitir reverter operações em caso de falha.
+
+## 6. Perfil de Sistema
+
+* Conjunto padrão de USE flags e pacotes.
+* Ao instalar novos pacotes, herdar configurações do perfil.
+
+## 7. Hooks Avançados
+
+* Hooks condicionais baseados em flags ou dependências.
+* Suporte a scripts de teste antes de marcar instalação como concluída.
+
+## 8. Suporte a Múltiplos Repositórios
+
+* Sincronizar receitas de diferentes repositórios Git ou HTTP.
+* Prioridade e fallback automático caso um repositório falhe.
+
+## 9. Resolução de Conflitos
+
+* Detectar conflitos de arquivos ou pacotes antes de instalar.
+* Permitir sobrescrever ou abortar instalação.
+
+## 10. Interface Gráfica ou ncurses
+
+* Visualizar pacotes disponíveis, status de instalação e USE flags interativas.
+* UI colorida interativa via terminal.
+
+## 11. Compilação Paralela e Otimizada
+
+* Detectar CPU cores e usar `make -j` eficientemente.
+* Cache de compilação parcial para builds repetidos (ccache).
+
+## 12. Rollback / Reversão de Pacotes
+
+* Desfazer instalações ou atualizações que falharam.
+* Manter snapshots dos diretórios afetados.
+
+## 13. Gerenciamento de Patches Avançado
+
+* Aplicação condicional baseada em USE flags ou versão.
+* Detectar patches já aplicados para evitar duplicação.
+
+## 14. Dependências Opcionais e Sugeridas
+
+* Diferenciar entre dependências obrigatórias e opcionais.
+* Instalar pacotes mínimos ou completos.
+
+## 15. Verificação de Integridade
+
+* Checagem de checksums (SHA256) de arquivos baixados.
+* Garantir que sources não foram corrompidos.
+
+## 16. Hooks Mais Avançados
+
+* Hooks pré/post para cada etapa: download, extract, patch, build, install, remove.
+* Hooks globais e locais.
+
+## 17. Build Profiles Avançados
+
+* Perfis para desenvolvimento, produção, servidor, desktop.
+* Cada perfil define USE flags, otimizações e pacotes base.
+
+## 18. Sandbox Mais Isolado
+
+* Uso de contêineres leves (Docker/LXC) ou `bubblewrap`.
+* Isolamento de rede, usuários e filesystem.
+
+## 19. Atualizações Automáticas
+
+* Atualizar pacotes individualmente ou em lote.
+* Resolver dependências automaticamente.
+
+## 20. Relatórios e Estatísticas
+
+* Espaço usado, pacotes instalados, dependências órfãs, histórico.
+* Geração de gráficos ou tabelas via CLI ou exportação CSV.
+
+## 21. Integração com Git/Versionamento de Receitas
+
+* Controlar versões de receitas via Git.
+* Permitir rollback de receitas sem quebrar builds.
+
+## 22. Suporte Multiplataforma
+
+* Adaptar sandbox e paths para Linux, WSL e macOS.
+
+## 23. Otimizações Finais
+
+* Paralelização de downloads.
+* Logs inteligentes com cores, timestamps e filtros.
+* Compatibilidade futura com pacotes binários pré-compilados.
+
+---
+
+Este documento serve como roadmap avançado para evolução do Merge, permitindo planejar novas funcionalidades e melhorias futuras.
