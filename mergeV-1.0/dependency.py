@@ -1,11 +1,10 @@
-import os
+import re
 from typing import List, Dict, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 from recipe import Recipe, list_recipes
 from uses import UseManager
 from logs import info, warn, error
-from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
-import re
 
 class Version:
     """Classe para manipulação e comparação de versões."""
@@ -26,14 +25,13 @@ class DependencyManager:
 
     @lru_cache(maxsize=None)
     def resolve_dependencies(
-        self, package_name: str, build: bool = True,
+        self,
+        package_name: str,
+        build: bool = True,
         required_version: Optional[str] = None,
         resolved_versions: Optional[Dict[str, str]] = None
     ) -> List[str]:
-        """
-        Resolve dependências de um pacote, respeitando operadores de versão e flags USE.
-        Detecta conflitos de versão.
-        """
+        """Resolve dependências de um pacote, com suporte a versões e flags USE."""
         if resolved_versions is None:
             resolved_versions = {}
 
@@ -73,8 +71,7 @@ class DependencyManager:
             # Detecta conflito de versão
             if pkg in resolved_versions:
                 if not _check_version(r.version, version_constraint):
-                    error(f'Conflito de versão para {pkg}: '
-                          f'{r.version} não atende {version_constraint}')
+                    error(f'Conflito de versão para {pkg}: {r.version} não atende {version_constraint}')
                 return
             else:
                 if not _check_version(r.version, version_constraint):
@@ -102,9 +99,7 @@ class DependencyManager:
         info(f'Dependências resolvidas para {package_name}: {resolved}')
         return resolved
 
-    def get_dependency_tree(
-        self, package_name: str, build: bool = True, level: int = 0
-    ) -> str:
+    def get_dependency_tree(self, package_name: str, build: bool = True, level: int = 0) -> str:
         """Retorna árvore de dependências mostrando versões e flags USE."""
         tree_str = ''
         if package_name not in self.recipes:
@@ -131,14 +126,11 @@ class DependencyManager:
         _tree(package_name, level)
         return tree_str
 
-    def resolve_dependencies_parallel(
-        self, package_names: List[str], build: bool = True
-    ) -> Dict[str, List[str]]:
+    def resolve_dependencies_parallel(self, package_names: List[str], build: bool = True) -> Dict[str, List[str]]:
         """Resolve múltiplos pacotes em paralelo."""
         with ThreadPoolExecutor() as executor:
             results = executor.map(lambda pkg: (pkg, self.resolve_dependencies(pkg, build)), package_names)
         return dict(results)
-
 
 # Exemplo de uso
 if __name__ == '__main__':
