@@ -1,0 +1,52 @@
+# ~/.merge/repo/gcc-pass1.yaml
+
+name: gcc-pass1
+version: 13.2.0
+src_uri:
+  - https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.gz
+checksum:
+  - sha256: a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890
+dependencies:
+  build:
+    - binutils-pass1
+  runtime: []
+dependencies_sources:
+  gmp:
+    - https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz
+  mpfr:
+    - https://www.mpfr.org/mpfr-4.2.0/mpfr-4.2.0.tar.xz
+  mpc:
+    - https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz
+  isl:
+    - https://libisl.sourceforge.io/isl-0.24.tar.xz
+use_flags:
+  cxx: false
+  lto: false
+patches: []
+hooks:
+  pre_configure:
+    - mkdir -p build-pass1
+    - cd build-pass1
+    - echo 'Downloading and integrating dependencies'
+    - ../merge download gmp mpfr mpc isl
+    - cp -r ../gmp-*/ gmp
+    - cp -r ../mpfr-*/ mpfr
+    - cp -r ../mpc-*/ mpc
+    - cp -r ../isl-*/ isl
+    - ../gcc-13.2.0/configure --prefix=/tools --disable-multilib --disable-bootstrap --disable-nls --enable-languages=c --without-headers
+  post_configure:
+    - echo 'GCC pass1 configure done'
+  pre_compile:
+    - make all-gcc -j$(nproc)
+  post_compile:
+    - echo 'GCC pass1 compilation done'
+  pre_install:
+    - make install-gcc
+  post_install:
+    - echo 'GCC pass1 installed successfully'
+  pre_remove:
+    - echo 'Preparing to remove GCC pass1'
+  post_remove:
+    - echo 'GCC pass1 removed successfully'
+update_source:
+  http: https://ftp.gnu.org/gnu/gcc/
