@@ -1,219 +1,181 @@
-#!/usr/bin/env python3
-import sys
-import os
+import asyncio
 import readline
-from merge import (
-    sync, recipe, install, remove, download, extract, upgrade, update,
-    logs, hooks, patch, dependency, uses, sandbox
-)
-from merge import merge_autocomplete
+from config import Config
+from recipe import RecipeManager
+from install import Installer
+from remove import Remover
+from download import Downloader
+from extract import Extractor
+from upgrade import UpgraderV3
+from update import Updater
+from sync import SyncManager
+from patch import PatchApplier
+from hooks import HooksManager
+from uses import UseManager
+from sandbox import Sandbox
+from merge_autocomplete import setup_autocomplete
+from logs import info, success, warn, error, stage
+from colorama import Fore, Style
 
-# Cores para terminal
-class Colors:
-    HEADER = '\033[95m'
-    OK = '\033[92m'
-    WARNING = '\033[93m'
-    ERROR = '\033[91m'
-    END = '\033[0m'
+# Inicializa módulos
+installer = Installer()
+remover = Remover()
+downloader = Downloader(Config.BUILD_DIR, sandbox=Sandbox, hooks=HooksManager())
+extractor = Extractor(sandbox=Sandbox, hooks=HooksManager())
+upgrader = UpgraderV3()
+updater = Updater()
+sync_manager = SyncManager.from_config(Config.REPO_FILE)
+patcher = PatchApplier(Config.BUILD_DIR)
+hooks = HooksManager()
+use_manager = UseManager()
+recipe_manager = RecipeManager()
 
-HISTORY_FILE = os.path.expanduser("~/.merge_history")
+# Configura autocomplete
+setup_autocomplete(recipe_manager, ["i", "r", "f", "g", "info", "build", "sync", "update", "upgrade"])
 
-def confirm(prompt="Deseja continuar? (s/n): "):
-    if not sys.stdin.isatty():
-        return True
-    resp = input(prompt).strip().lower()
-    return resp in ("s", "sim", "y", "yes")
-
-def save_history():
+# --------------------
+# Funções auxiliares
+# --------------------
+def pacote_status(recipe_name):
     try:
-        readline.write_history_file(HISTORY_FILE)
+        installed = recipe_manager.get_installed(recipe_name)
+        # Verifica se há update disponível
+        if recipe_manager.has_update(recipe_name):
+            return "UPDATE"
+        return "INSTALADO"
     except Exception:
-        pass
+        return "NÃO INSTALADO"
 
-def load_history():
-    if os.path.exists(HISTORY_FILE):
-        try:
-            readline.read_history_file(HISTORY_FILE)
-        except Exception:
-            pass
+def color_status(status):
+    if status == "INSTALADO": return Fore.GREEN + status + Fore.RESET
+    if status == "NÃO INSTALADO": return Fore.RED + status + Fore.RESET
+    if status == "UPDATE": return Fore.YELLOW + status + Fore.RESET
+    if status == "ERRO": return Fore.RED + Style.BRIGHT + status + Fore.RESET
+    return status
 
-def setup_autocomplete(recipe_manager):
-    commands = [
-        "sync", "list", "install", "remove", "update", "upgrade",
-        "download", "extract", "patch", "dependencies",
-        "sandbox", "hooks", "uses", "deepclean", "depclean",
-        "exit", "quit"
-    ]
-    def completer(text, state):
-        buffer = readline.get_line_buffer()
-        tokens = buffer.split()
-        if len(tokens) == 0 or (len(tokens) == 1 and not buffer.endswith(" ")):
-            options = [c for c in commands if c.startswith(text)]
-        elif len(tokens) == 2 and tokens[0] in ("install", "remove", "download", "extract"):
-            options = [r.name for r in recipe_manager.list_recipes() if r.name.startswith(text)]
-        else:
-            options = []
-        if state < len(options):
-            return options[state]
-        return None
-    readline.set_completer(completer)
-    readline.parse_and_bind("tab: complete")
+def listar_receitas():
+    stage("Receitas disponíveis:")
+    for recipe in recipe_manager.list_recipes():
+        status = pacote_status(recipe.name)
+        flags = asyncio.run(use_manager.get_flags(recipe.name))
+        info(f" - {recipe.name} ({recipe.version}) [{color_status(status)}] Flags: {', '.join(flags) if flags else 'Nenhuma'}")
 
-def print_ok(msg): print(f"{Colors.OK}[OK]{Colors.END} {msg}")
-def print_warn(msg): print(f"{Colors.WARNING}[AVISO]{Colors.END} {msg}")
-def print_error(msg): print(f"{Colors.ERROR}[ERRO]{Colors.END} {msg}")
-
-def deepclean(recipe_manager):
-    if not confirm("Deseja executar DEEPCLEAN em todas as receitas? Isso é irreversível! (s/n): "):
-        print_warn("Operação deepclean cancelada.")
-        return
-    print_warn("Iniciando DEEPCLEAN...")
-    for rec in recipe_manager.list_recipes():
-        try:
-            remove.remove_recipe(rec)
-            extract.clean_recipe(rec)
-            sandbox.clean_sandbox(rec)
-        except Exception as e:
-            logs.log_error(f"Erro ao limpar {rec.name}: {e}")
-            print_error(f"Erro ao limpar {rec.name}: {e}")
-    print_ok("DEEPCLEAN concluído com sucesso!")
-
-def depclean(recipe_manager):
-    print_warn("Iniciando DEPCLEAN...")
-    dependency.remove_unused_dependencies()
-    print_ok("DEPCLEAN concluído com sucesso!")
-
-def main_command(args, sync_manager, recipe_manager):
-    if not args:
-        print_warn("Nenhum comando informado.")
-        return
-    cmd, cmd_args = args[0], args[1:]
+# --------------------
+# Comandos principais
+# --------------------
+def cmd_instalar(pkg):
+    stage(f"Iniciando instalação de {pkg}...")
     try:
-        if cmd == "sync":
-            sync_manager.sync_repo()
-            print_ok("Repositório sincronizado com sucesso!")
-
-        elif cmd == "list":
-            for r in recipe_manager.list_recipes():
-                print(f" - {r.name}")
-
-        elif cmd == "install":
-            if not cmd_args:
-                print_error("Informe a receita para instalar.")
-                return
-            rec_name = cmd_args[0]
-            rec = recipe_manager.get_recipe(rec_name)
-            if not rec:
-                print_error(f"Receita '{rec_name}' não encontrada.")
-                return
-            if confirm(f"Deseja instalar {rec_name}? "):
-                sandbox.run_in_sandbox(lambda: install.install_recipe(rec))
-                print_ok(f"{rec_name} instalado com sucesso!")
-
-        elif cmd == "remove":
-            if not cmd_args:
-                print_error("Informe a receita para remover.")
-                return
-            rec_name = cmd_args[0]
-            rec = recipe_manager.get_recipe(rec_name)
-            if not rec:
-                print_error(f"Receita '{rec_name}' não encontrada.")
-                return
-            if confirm(f"Deseja remover {rec_name}? "):
-                sandbox.run_in_sandbox(lambda: remove.remove_recipe(rec))
-                print_ok(f"{rec_name} removido com sucesso!")
-
-        elif cmd == "update":
-            sandbox.run_in_sandbox(update.update_all)
-            print_ok("Atualização concluída!")
-
-        elif cmd == "upgrade":
-            sandbox.run_in_sandbox(upgrade.upgrade_system)
-            print_ok("Sistema atualizado!")
-
-        elif cmd == "download":
-            if not cmd_args:
-                print_error("Informe a receita para download.")
-                return
-            rec_name = cmd_args[0]
-            rec = recipe_manager.get_recipe(rec_name)
-            if rec:
-                sandbox.run_in_sandbox(lambda: download.download_recipe(rec))
-                print_ok(f"{rec_name} baixado com sucesso!")
-            else:
-                print_error(f"Receita '{rec_name}' não encontrada.")
-
-        elif cmd == "extract":
-            if not cmd_args:
-                print_error("Informe a receita para extrair.")
-                return
-            rec_name = cmd_args[0]
-            rec = recipe_manager.get_recipe(rec_name)
-            if rec:
-                sandbox.run_in_sandbox(lambda: extract.extract_recipe(rec))
-                print_ok(f"{rec_name} extraído com sucesso!")
-            else:
-                print_error(f"Receita '{rec_name}' não encontrada.")
-
-        elif cmd == "patch":
-            sandbox.run_in_sandbox(patch.apply_patches)
-            print_ok("Patches aplicados com sucesso!")
-
-        elif cmd == "dependencies":
-            dependency.check_dependencies()
-            print_ok("Verificação de dependências concluída!")
-
-        elif cmd == "sandbox":
-            sandbox.run_sandbox()
-            print_ok("Sandbox executado com sucesso!")
-
-        elif cmd == "hooks":
-            hooks.run_hooks()
-            print_ok("Hooks executados com sucesso!")
-
-        elif cmd == "uses":
-            uses.show_uses()
-            print_ok("Exibição de usos concluída!")
-
-        elif cmd == "deepclean":
-            deepclean(recipe_manager)
-
-        elif cmd == "depclean":
-            depclean(recipe_manager)
-
-        else:
-            print_warn(f"Comando '{cmd}' não reconhecido.")
-
+        installer.install(pkg)
+        downloader.download(pkg)
+        extractor.extract_all_parallel(pkg)
+        asyncio.run(patcher.apply_recipe_patches(pkg, ["./build_dir"]))
+        asyncio.run(hooks.run_all_hooks(pkg))
+        flags = asyncio.run(use_manager.get_flags(pkg))
+        info(f"Flags USE para {pkg}: {flags}")
+        success(f"Pacote {pkg} instalado!")
     except Exception as e:
-        logs.log_error(f"Erro ao executar {cmd}: {e}")
-        print_error(f"Erro: {e}")
+        error(f"Erro ao instalar {pkg}: {e}")
 
-def main():
-    logs.setup_logging()
-    sync_manager = sync.SyncManager()
-    recipe_manager = recipe.RecipeManager(sync_manager.list_recipes())
-    setup_autocomplete(recipe_manager)
-    load_history()
+def cmd_remover(pkg):
+    try:
+        remover.remove(pkg)
+        success(f"Pacote {pkg} removido!")
+    except Exception as e:
+        error(f"Erro ao remover {pkg}: {e}")
 
-    if len(sys.argv) > 1:
-        main_command(sys.argv[1:], sync_manager, recipe_manager)
-    else:
-        print(f"{Colors.HEADER}Merge CLI - Digite 'exit' para sair{Colors.END}")
-        while True:
-            try:
-                cmd_input = input("> ").strip()
-                if cmd_input.lower() in ("exit", "quit"):
-                    break
-                if not cmd_input:
-                    continue
-                main_command(cmd_input.split(), sync_manager, recipe_manager)
-            except KeyboardInterrupt:
-                print("\nSaindo...")
-                break
-            except Exception as e:
-                print_error(f"Erro inesperado: {e}")
-            finally:
-                save_history()
+def cmd_flags(pkg):
+    flags = asyncio.run(use_manager.get_flags(pkg))
+    info(f"Flags USE para {pkg}: {flags}")
+
+def cmd_gerenciar_flags(pkg):
+    flags = asyncio.run(use_manager.get_flags(pkg))
+    info(f"Flags atuais de {pkg}: {flags}")
+    print("Digite a flag para ativar/desativar (ou 'sair' para voltar):")
+    while True:
+        f = input("Flag: ").strip()
+        if f.lower() == "sair": break
+        if f in flags:
+            asyncio.run(use_manager.disable_flag(pkg, f))
+            warn(f"Flag {f} desativada.")
+        else:
+            asyncio.run(use_manager.enable_flag(pkg, f))
+            success(f"Flag {f} ativada.")
+        flags = asyncio.run(use_manager.get_flags(pkg))
+        info(f"Flags atuais: {flags}")
+
+def cmd_sync(): asyncio.run(sync_manager.sync_all()); success("Repos sincronizados!")
+def cmd_update(): updater.update(world=True); success("Sistema atualizado!")
+def cmd_upgrade(): asyncio.run(upgrader.upgrade_packages()); success("Upgrade concluído!")
+
+# --------------------
+# Novos comandos
+# --------------------
+def cmd_info(pkg):
+    try:
+        recipe = recipe_manager.get_recipe(pkg)
+        status = pacote_status(pkg)
+        flags = asyncio.run(use_manager.get_flags(pkg))
+        stage(f"Informações do pacote: {pkg}")
+        info(f"Nome: {recipe.name}")
+        info(f"Versão: {recipe.version}")
+        info(f"Status: {color_status(status)}")
+        info(f"Dependências: {', '.join(recipe.dependencies) if recipe.dependencies else 'Nenhuma'}")
+        info(f"Flags USE: {', '.join(flags) if flags else 'Nenhuma'}")
+        info(f"Receitas: {recipe.recipe_file}")
+    except Exception as e:
+        error(f"Erro ao obter info de {pkg}: {e}")
+
+def cmd_build(pkg):
+    stage(f"Iniciando build simulado para {pkg}...")
+    try:
+        downloader.download(pkg)
+        extractor.extract_all_parallel(pkg)
+        asyncio.run(patcher.apply_recipe_patches(pkg, ["./build_dir"]))
+        asyncio.run(hooks.run_all_hooks(pkg))
+        success(f"Build de {pkg} concluído (simulado, pacote não instalado).")
+    except Exception as e:
+        error(f"Erro no build simulado de {pkg}: {e}")
+
+# --------------------
+# Loop principal
+# --------------------
+def main_loop():
+    stage("=== Merge Program Manager (Terminal Avançado) ===")
+    info("Digite 'help' para ver os comandos disponíveis.\n")
+    while True:
+        listar_receitas()
+        cmd = input("> ").strip()
+        if not cmd: continue
+        parts = cmd.split()
+        action = parts[0].lower()
+        arg = parts[1] if len(parts) > 1 else None
+
+        if action == "help":
+            print("""
+Comandos disponíveis:
+ i <pacote>       - Instalar pacote
+ r <pacote>       - Remover pacote
+ f <pacote>       - Mostrar flags USE
+ g <pacote>       - Gerenciar flags USE
+ info <pacote>    - Mostrar informações detalhadas do pacote
+ build <pacote>   - Simular build sem instalar
+ sync             - Sincronizar repositórios
+ update           - Atualizar sistema
+ upgrade          - Upgrade do sistema
+ exit / quit      - Sair
+""")
+        elif action == "i" and arg: cmd_instalar(arg)
+        elif action == "r" and arg: cmd_remover(arg)
+        elif action == "f" and arg: cmd_flags(arg)
+        elif action == "g" and arg: cmd_gerenciar_flags(arg)
+        elif action == "sync": cmd_sync()
+        elif action == "update": cmd_update()
+        elif action == "upgrade": cmd_upgrade()
+        elif action == "info" and arg: cmd_info(arg)
+        elif action == "build" and arg: cmd_build(arg)
+        elif action in ["exit", "quit"]: stage("Saindo do gerenciador..."); break
+        else: warn("Comando inválido! Digite 'help' para ajuda.")
 
 if __name__ == "__main__":
-    main()
+    main_loop()
