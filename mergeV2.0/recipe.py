@@ -1,104 +1,68 @@
 import os
 import yaml
-import json
-import asyncio
-from typing import List, Dict
-from logs import info, warn, error
-from config import REPO_DIR
+from config import LOCAL_REPO_DIR
+from logs import info, warn
 
 class Recipe:
-    def __init__(self, path: str):
-        self.path = path
-        self.data = self._load_data()
+    """Representa uma receita individual"""
+    def __init__(self, data):
+        self.name = data.get("name")
+        self.version = data.get("version")
+        self.description = data.get("description")
+        self.homepage = data.get("homepage")
+        self.license = data.get("license")
+        self.dependencies = data.get("dependencies", [])
+        self.repo_url = data.get("repo_url")
+        self.patch_url = data.get("patch_url", [])
+        self.build_dir = data.get("build_dir")
+        self.install_prefix = data.get("install_prefix")
+        self.use_flags = data.get("use_flags", [])
+        self.hooks = data.get("hooks", {})
+        self.build_commands = data.get("build_commands", [])
+        self.install_commands = data.get("install_commands", [])
 
-    def _load_data(self) -> Dict:
-        """Carrega os dados da receita e mantém compatibilidade com o sistema antigo."""
-        if not os.path.exists(self.path):
-            warn(f'Recipe file not found: {self.path}')
-            return {}
+class RecipeManager:
+    """Gerencia todas as receitas do Merge"""
+    def __init__(self, local_repo=LOCAL_REPO_DIR):
+        self.local_repo = local_repo
+        self.recipes = []
 
-        try:
-            with open(self.path, 'r') as f:
-                if self.path.endswith(('.yaml', '.yml')):
-                    return yaml.safe_load(f) or {}
-                elif self.path.endswith('.json'):
-                    return json.load(f)
-                else:
-                    warn(f'Unsupported file format: {self.path}')
-                    return {}
-        except (yaml.YAMLError, json.JSONDecodeError) as e:
-            error(f'Error parsing {self.path}: {e}')
-            return {}
+    def load_local_recipes(self):
+        """Carrega todas as receitas YAML do repositório local recursivamente"""
+        if not os.path.exists(self.local_repo):
+            warn(f"Pasta de receitas local não encontrada: {self.local_repo}")
+            return
 
-    def _validate_data(self) -> bool:
-        """Valida as chaves obrigatórias da receita."""
-        required_keys = ['name', 'version', 'src_uri']
-        for key in required_keys:
-            if key not in self.data:
-                warn(f'Missing required key "{key}" in recipe: {self.path}')
-                return False
-        return True
+        for root, dirs, files in os.walk(self.local_repo):
+            for file in files:
+                if file.endswith(".yaml") or file.endswith(".yml"):
+                    path = os.path.join(root, file)
+                    try:
+                        with open(path, "r") as f:
+                            data = yaml.safe_load(f)
+                            if data:
+                                recipe = Recipe(data)
+                                self.recipes.append(recipe)
+                                info(f"Receita carregada: {recipe.name} ({recipe.version})")
+                            else:
+                                warn(f"Arquivo vazio ou inválido: {file}")
+                    except Exception as e:
+                        warn(f"Erro ao carregar {file}: {e}")
 
-    # ============================
-    # Propriedades compatíveis
-    # ============================
-    @property
-    def name(self) -> str:
-        return self.data.get('name', 'unknown')
+    def list_recipes(self):
+        """Retorna todas as receitas carregadas"""
+        return self.recipes
 
-    @property
-    def version(self) -> str:
-        return self.data.get('version', '0.0.0')
+    def find_recipe(self, name):
+        """Busca receita pelo nome"""
+        for recipe in self.recipes:
+            if recipe.name == name:
+                return recipe
+        return None
 
-    @property
-    def src_uri(self) -> List[str]:
-        return self.data.get('src_uri', [])
-
-    @property
-    def dependencies(self) -> Dict:
-        return self.data.get('dependencies', {})
-
-    @property
-    def use_flags(self) -> List[str]:
-        return self.data.get('use_flags', [])
-
-    @property
-    def patches(self) -> List[str]:
-        return self.data.get('patches', [])
-
-    @property
-    def hooks(self) -> Dict[str, str]:
-        return self.data.get('hooks', {})
-
-    @property
-    def update_source(self) -> Dict[str, str]:
-        return self.data.get('update_source', {})
-
-    def is_valid(self) -> bool:
-        """Verifica se a receita está válida."""
-        return self._validate_data()
-
-# ============================
-# Função assíncrona para listar receitas
-# ============================
-async def list_recipes() -> List[Recipe]:
-    """Lista todas as receitas válidas no repositório."""
-    recipes = []
-    if not os.path.exists(REPO_DIR):
-        warn(f'Repository directory does not exist: {REPO_DIR}')
-        return recipes
-
-    for file in os.listdir(REPO_DIR):
-        if file.endswith(('.yaml', '.yml', '.json')):
-            path = os.path.join(REPO_DIR, file)
-            recipe = Recipe(path)
-            if recipe.is_valid():
-                recipes.append(recipe)
-    info(f'Found {len(recipes)} valid recipes in repo')
-    return recipes
-
-# ============================
-# Teste rápido (compatível)
-# ============================
-if __name__ == '__main__':
-    asyncio.run(list_recipes())
+    def add_recipe(self, data):
+        """Adiciona uma nova receita em memória (não salva no disco)"""
+        recipe = Recipe(data)
+        self.recipes.append(recipe)
+        info(f"Receita adicionada em memória: {recipe.name} ({recipe.version})")
+        return recipe
