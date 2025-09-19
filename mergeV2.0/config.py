@@ -14,6 +14,7 @@ class Config:
     LOG_DIR = BASE_DIR / "logs"
     TEMP_DIR = BASE_DIR / "temp"
     PATCH_DIR = BASE_DIR / "patches"
+    LOCAL_REPO_DIR = "/usr/merge/repo"
 
     # ============================
     # URLs e repositórios
