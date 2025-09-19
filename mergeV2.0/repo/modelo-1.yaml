@@ -1,0 +1,48 @@
+name: firefox
+version: 117.0
+description: Mozilla Firefox Web Browser
+homepage: https://www.mozilla.org/firefox/
+license:
+  - MPL-2.0
+dependencies:
+  - gtk3
+  - libevent
+  - alsa-lib
+  - dbus
+  - python3
+  - rust
+  - cargo
+src_uri:
+  - https://ftp.mozilla.org/pub/firefox/releases/117.0/source/firefox-117.0.source.tar.xz
+  - git+https://github.com/mozilla/gecko-dev.git@mozilla-release
+build_dir: ./build/firefox
+install_prefix: /usr/local
+use_flags:
+  - gui
+  - debug
+  - optimize
+  - wayland
+  - pulseaudio
+patches:
+  - ./patches/fix-wayland.patch
+  - ./patches/fix-audio.patch
+hooks:
+  pre_build:
+    - echo "Pré-build: configurando ambiente do Firefox"
+    - export MOZCONFIG={build_dir}/mozconfig
+    - export CFLAGS="-O2 -pipe"
+    - export LDFLAGS="-L/usr/local/lib"
+  post_build:
+    - echo "Post-build: executando testes básicos"
+    - cd {build_dir}/build && ./mach test
+  pre_install:
+    - echo "Pré-instalação: criando diretórios"
+    - mkdir -p {install_prefix}/firefox
+  post_install:
+    - echo "Firefox instalado com sucesso!"
+build_commands:
+  - mkdir -p {build_dir}/build
+  - cd {build_dir}/build && ../configure --prefix={install_prefix} --enable-application=browser --enable-optimize={optimize} --enable-debug={debug} --enable-wayland={wayland} --enable-pulseaudio={pulseaudio}
+  - cd {build_dir}/build && make -j$(nproc)
+install_commands:
+  - cd {build_dir}/build && make install
